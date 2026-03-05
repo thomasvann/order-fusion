@@ -522,11 +522,9 @@ export default function App() {
   const [colTypes, setColTypes] = useState({});
   const [parseInfo, setParseInfo] = useState([]);
 
-  // Notion
+  // Notion — database is hardcoded, no selection needed
   const [showDbPicker, setShowDbPicker]     = useState(false);
-  const [targetDb, setTargetDb]             = useState(() => {
-    try { return JSON.parse(localStorage.getItem("notionDb") || "null"); } catch { return null; }
-  });
+  const [targetDb, setTargetDb]             = useState({ id: "31a9b1412417803abaf5e164229a0d54", title: "Orders" });
   const [notionSchema, setNotionSchema]     = useState(null);
   const [showMapper, setShowMapper]         = useState(false);
   const [columnMapping, setColumnMapping]   = useState(null);
@@ -541,12 +539,6 @@ export default function App() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState(null);
   const [activeTab, setActiveTab] = useState("merged");
-
-  // Persist targetDb
-  useEffect(() => {
-    if (targetDb) localStorage.setItem("notionDb", JSON.stringify(targetDb));
-    else localStorage.removeItem("notionDb");
-  }, [targetDb]);
 
   // ── Select Database ──
   const handleDbSelected = useCallback(async (db) => {
