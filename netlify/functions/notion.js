@@ -1,27 +1,33 @@
 // netlify/functions/notion.js
-// This is the proxy that sits between your browser and the Notion API.
-// Netlify runs this as a serverless function — no separate server needed.
-
 exports.handler = async (event) => {
   const CORS = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   };
 
-  // Handle preflight
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 204, headers: CORS, body: "" };
   }
 
   try {
-    const { path: notionPath, method, body, token } = JSON.parse(event.body || "{}");
+    // Token is stored securely in Netlify environment variables
+    const token = process.env.NOTION_TOKEN;
+    if (!token) {
+      return {
+        statusCode: 500,
+        headers: CORS,
+        body: JSON.stringify({ error: "Notion token not configured on server" }),
+      };
+    }
 
-    if (!notionPath || !token) {
+    const { path: notionPath, method, body } = JSON.parse(event.body || "{}");
+
+    if (!notionPath) {
       return {
         statusCode: 400,
         headers: CORS,
-        body: JSON.stringify({ error: "Missing path or token" }),
+        body: JSON.stringify({ error: "Missing path" }),
       };
     }
 
