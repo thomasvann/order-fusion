@@ -146,7 +146,7 @@ function detectFirstRowRole(rows) {
 const COL_TYPE_META = {
   integer: { label: "Quantity",    color: "#818cf8", icon: "#",  badge: "#1e1b4b", badgeFg: "#a5b4fc" },
   float:   { label: "Price",       color: "#34d399", icon: "$",  badge: "#052e16", badgeFg: "#6ee7b7" },
-  url:     { label: "Link",        color: "#fbbf24", icon: "↗",  badge: "#451a03", badgeFg: "#fcd34d" },
+  url:     { label: "Link",        color: "#7EC8E3", icon: "↗",  badge: "#451a03", badgeFg: "#fcd34d" },
   text:    { label: "Text",        color: "#f472b6", icon: "T",  badge: "#4a044e", badgeFg: "#f0abfc" },
   unknown: { label: "Other",       color: "#6b7280", icon: "?",  badge: "#1f2937", badgeFg: "#9ca3af" },
 };
@@ -156,7 +156,7 @@ const NOTION_PROP_META = {
   title:        { color: "#f472b6", icon: "★" },
   rich_text:    { color: "#e2e8f0", icon: "T" },
   number:       { color: "#34d399", icon: "#" },
-  url:          { color: "#fbbf24", icon: "↗" },
+  url:          { color: "#7EC8E3", icon: "↗" },
   email:        { color: "#818cf8", icon: "@" },
   phone_number: { color: "#c084fc", icon: "☎" },
   checkbox:     { color: "#6ee7b7", icon: "✓" },
@@ -216,7 +216,7 @@ function DropZone({ label, sublabel, icon, accept, onFile, file }) {
       onDragLeave={() => setDrag(false)}
       onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) onFile(f); }}
       onClick={() => ref.current.click()}
-      style={{ border: `2px dashed ${drag ? "#f97316" : file ? "#34d399" : "#1f2937"}`, borderRadius: "14px", padding: "20px 16px", cursor: "pointer", background: drag ? "#1c0a00" : file ? "#031a0e" : "#0b0f1a", transition: "all 0.2s", textAlign: "center", flex: 1, minWidth: 0 }}
+      style={{ border: `2px dashed ${drag ? "#4B9CD3" : file ? "#34d399" : "#1f2937"}`, borderRadius: "14px", padding: "20px 16px", cursor: "pointer", background: drag ? "#001B44" : file ? "#031a0e" : "#0b0f1a", transition: "all 0.2s", textAlign: "center", flex: 1, minWidth: 0 }}
     >
       <input ref={ref} type="file" accept={accept} style={{ display: "none" }} onChange={(e) => e.target.files[0] && onFile(e.target.files[0])} />
       <div style={{ fontSize: "1.6rem", marginBottom: "5px" }}>{icon}</div>
@@ -256,7 +256,7 @@ function NotionSetupModal({ onSave, onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "#040810ee", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
       <div style={{ background: "#0b0f1a", border: "1px solid #1f2937", borderRadius: "18px", padding: "28px", maxWidth: "540px", width: "100%" }}>
-        <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", color: "#fdba74", marginBottom: "6px" }}>Connect Notion</div>
+        <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", color: "#7EC8E3", marginBottom: "6px" }}>Connect Notion</div>
         <div style={{ color: "#6b7280", fontSize: "0.68rem", lineHeight: 2, marginBottom: "20px" }}>
           You need a Notion Internal Integration token to push data to your database.<br />
           <strong style={{ color: "#9ca3af" }}>Steps:</strong><br />
@@ -274,7 +274,7 @@ function NotionSetupModal({ onSave, onClose }) {
           style={{ width: "100%", background: "#04060f", border: "1px solid #374151", borderRadius: "8px", padding: "10px 12px", color: "#f9fafb", fontSize: "0.73rem", fontFamily: "monospace", marginBottom: "14px", outline: "none", boxSizing: "border-box" }}
         />
         <div style={{ display: "flex", gap: "10px" }}>
-          <button onClick={save} style={{ background: "linear-gradient(135deg,#ea580c,#f97316)", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.7rem", cursor: "pointer" }}>
+          <button onClick={save} style={{ background: "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.7rem", cursor: "pointer" }}>
             SAVE & CONNECT
           </button>
           <button onClick={onClose} style={{ background: "transparent", border: "1px solid #374151", color: "#6b7280", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.7rem", cursor: "pointer" }}>
@@ -315,7 +315,7 @@ function DatabasePickerModal({ onSelect, onClose }) {
     <div style={{ position: "fixed", inset: 0, background: "#040810ee", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
       <div style={{ background: "#0b0f1a", border: "1px solid #1f2937", borderRadius: "20px", padding: "28px", maxWidth: "520px", width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
-          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", color: "#fdba74" }}>Select Notion Database</div>
+          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", color: "#7EC8E3" }}>Select Notion Database</div>
           <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#6b7280", cursor: "pointer", fontSize: "1.2rem" }}>✕</button>
         </div>
 
@@ -333,15 +333,15 @@ function DatabasePickerModal({ onSelect, onClose }) {
             )}
             {databases.map((db) => (
               <div key={db.id} onClick={() => setSelectedDb(db)}
-                style={{ padding: "12px 14px", borderRadius: "10px", cursor: "pointer", background: selectedDb?.id === db.id ? "#1c0a00" : "#06090f", border: `1px solid ${selectedDb?.id === db.id ? "#f97316" : "#1f2937"}`, display: "flex", alignItems: "center", gap: "10px", transition: "all 0.15s" }}>
+                style={{ padding: "12px 14px", borderRadius: "10px", cursor: "pointer", background: selectedDb?.id === db.id ? "#001B44" : "#06090f", border: `1px solid ${selectedDb?.id === db.id ? "#4B9CD3" : "#1f2937"}`, display: "flex", alignItems: "center", gap: "10px", transition: "all 0.15s" }}>
                 <span style={{ fontSize: "1.1rem" }}>🗄</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: selectedDb?.id === db.id ? "#fdba74" : "#d1d5db", fontSize: "0.75rem", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ color: selectedDb?.id === db.id ? "#7EC8E3" : "#d1d5db", fontSize: "0.75rem", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {getDbTitle(db)}
                   </div>
                   <div style={{ color: "#374151", fontSize: "0.56rem", marginTop: "2px", fontFamily: "monospace" }}>{db.id}</div>
                 </div>
-                {selectedDb?.id === db.id && <span style={{ color: "#f97316", fontSize: "0.8rem" }}>✓</span>}
+                {selectedDb?.id === db.id && <span style={{ color: "#4B9CD3", fontSize: "0.8rem" }}>✓</span>}
               </div>
             ))}
           </div>
@@ -350,7 +350,7 @@ function DatabasePickerModal({ onSelect, onClose }) {
         <div style={{ marginTop: "20px", display: "flex", gap: "10px", justifyContent: "flex-end" }}>
           <button onClick={onClose} style={{ background: "transparent", border: "1px solid #374151", color: "#6b7280", borderRadius: "8px", padding: "9px 18px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: "pointer" }}>CANCEL</button>
           <button onClick={confirm} disabled={!selectedDb}
-            style={{ background: !selectedDb ? "#1f2937" : "linear-gradient(135deg,#ea580c,#f97316)", color: !selectedDb ? "#4b5563" : "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: !selectedDb ? "not-allowed" : "pointer" }}>
+            style={{ background: !selectedDb ? "#1f2937" : "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: !selectedDb ? "#4b5563" : "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: !selectedDb ? "not-allowed" : "pointer" }}>
             ✓ USE THIS DATABASE
           </button>
         </div>
@@ -398,7 +398,7 @@ function ColumnMapperModal({ spreadsheetHeaders, notionSchema, onConfirm, onClos
     <div style={{ position: "fixed", inset: 0, background: "#040810ee", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
       <div style={{ background: "#0b0f1a", border: "1px solid #1f2937", borderRadius: "20px", padding: "28px", maxWidth: "640px", width: "100%", maxHeight: "85vh", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", color: "#fdba74" }}>Map Columns → Notion</div>
+          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", color: "#7EC8E3" }}>Map Columns → Notion</div>
           <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#6b7280", cursor: "pointer", fontSize: "1.2rem" }}>✕</button>
         </div>
         <div style={{ color: "#6b7280", fontSize: "0.62rem", marginBottom: "18px" }}>
@@ -411,7 +411,7 @@ function ColumnMapperModal({ spreadsheetHeaders, notionSchema, onConfirm, onClos
             const notionProp = notionSchema[currentVal];
             const meta = NOTION_PROP_META[notionProp?.type] || { color: "#6b7280", icon: "?" };
             return (
-              <div key={h} style={{ display: "flex", alignItems: "center", gap: "10px", background: "#06090f", borderRadius: "10px", padding: "10px 12px", border: `1px solid ${currentVal ? "#f9731620" : "#1f2937"}` }}>
+              <div key={h} style={{ display: "flex", alignItems: "center", gap: "10px", background: "#06090f", borderRadius: "10px", padding: "10px 12px", border: `1px solid ${currentVal ? "#4B9CD320" : "#1f2937"}` }}>
                 {/* Spreadsheet column */}
                 <div style={{ flex: "0 0 180px", minWidth: 0 }}>
                   <div style={{ color: "#f9fafb", fontSize: "0.72rem", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h}</div>
@@ -425,7 +425,7 @@ function ColumnMapperModal({ spreadsheetHeaders, notionSchema, onConfirm, onClos
                   <select
                     value={currentVal}
                     onChange={(e) => setMap(h, e.target.value)}
-                    style={{ width: "100%", background: "#04060f", border: `1px solid ${currentVal ? "#f97316" : "#374151"}`, borderRadius: "7px", padding: "6px 10px", color: currentVal ? "#fdba74" : "#6b7280", fontSize: "0.68rem", fontFamily: "monospace", outline: "none", cursor: "pointer" }}
+                    style={{ width: "100%", background: "#04060f", border: `1px solid ${currentVal ? "#4B9CD3" : "#374151"}`, borderRadius: "7px", padding: "6px 10px", color: currentVal ? "#7EC8E3" : "#6b7280", fontSize: "0.68rem", fontFamily: "monospace", outline: "none", cursor: "pointer" }}
                   >
                     <option value="">— skip this column —</option>
                     {editableProps.map(([name, prop]) => {
@@ -455,7 +455,7 @@ function ColumnMapperModal({ spreadsheetHeaders, notionSchema, onConfirm, onClos
           <div style={{ display: "flex", gap: "10px" }}>
             <button onClick={onClose} style={{ background: "transparent", border: "1px solid #374151", color: "#6b7280", borderRadius: "8px", padding: "9px 18px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: "pointer" }}>CANCEL</button>
             <button onClick={() => onConfirm(mapping)} disabled={mappedCount === 0}
-              style={{ background: mappedCount === 0 ? "#1f2937" : "linear-gradient(135deg,#ea580c,#f97316)", color: mappedCount === 0 ? "#4b5563" : "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: mappedCount === 0 ? "not-allowed" : "pointer" }}>
+              style={{ background: mappedCount === 0 ? "#1f2937" : "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: mappedCount === 0 ? "#4b5563" : "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: mappedCount === 0 ? "not-allowed" : "pointer" }}>
               ✓ CONFIRM MAPPING
             </button>
           </div>
@@ -473,7 +473,7 @@ function PushProgressModal({ total, pushed, failed, onClose, done }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "#040810ee", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
       <div style={{ background: "#0b0f1a", border: "1px solid #1f2937", borderRadius: "18px", padding: "32px", maxWidth: "400px", width: "100%", textAlign: "center" }}>
-        <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", color: done ? "#34d399" : "#fdba74", marginBottom: "8px" }}>
+        <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", color: done ? "#34d399" : "#7EC8E3", marginBottom: "8px" }}>
           {done ? "✓ Upload Complete" : "Pushing to Notion…"}
         </div>
         <div style={{ color: "#6b7280", fontSize: "0.65rem", marginBottom: "20px" }}>
@@ -482,7 +482,7 @@ function PushProgressModal({ total, pushed, failed, onClose, done }) {
 
         {/* Progress bar */}
         <div style={{ background: "#0d1220", borderRadius: "4px", height: "6px", marginBottom: "16px", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${pct}%`, background: failed > 0 ? "linear-gradient(90deg,#f97316,#ef4444)" : "linear-gradient(90deg,#f97316,#fbbf24)", borderRadius: "4px", transition: "width 0.3s ease" }} />
+          <div style={{ height: "100%", width: `${pct}%`, background: failed > 0 ? "linear-gradient(90deg,#4B9CD3,#ef4444)" : "linear-gradient(90deg,#4B9CD3,#7EC8E3)", borderRadius: "4px", transition: "width 0.3s ease" }} />
         </div>
 
         <div style={{ display: "flex", justifyContent: "center", gap: "20px", marginBottom: "20px" }}>
@@ -499,7 +499,7 @@ function PushProgressModal({ total, pushed, failed, onClose, done }) {
         </div>
 
         {done && (
-          <button onClick={onClose} style={{ background: "linear-gradient(135deg,#ea580c,#f97316)", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 24px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.7rem", cursor: "pointer" }}>
+          <button onClick={onClose} style={{ background: "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 24px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.7rem", cursor: "pointer" }}>
             DONE
           </button>
         )}
@@ -685,7 +685,7 @@ export default function App() {
         .th-sort:hover { background: #0d1220 !important; cursor: pointer; }
         .data-row:hover td { background: #080d18 !important; }
         .tab { background: none; border: none; cursor: pointer; padding: 10px 16px; font-family: 'Syne',sans-serif; font-size: 0.62rem; font-weight: 700; letter-spacing: 2px; color: #374151; border-bottom: 2px solid transparent; transition: all 0.2s; }
-        .tab.on { color: #fb923c; border-bottom-color: #f97316; }
+        .tab.on { color: #fb923c; border-bottom-color: #4B9CD3; }
         .tab:hover:not(.on) { color: #9ca3af; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .spin { display: inline-block; animation: spin 1s linear infinite; }
@@ -713,31 +713,31 @@ export default function App() {
       )}
 
       {/* ── HEADER ── */}
-      <div style={{ background: "linear-gradient(135deg,#04060f,#140a00)", borderBottom: "1px solid #1c0a00", padding: "14px 26px" }}>
+      <div style={{ background: "linear-gradient(135deg,#04060f,#140a00)", borderBottom: "1px solid #001B44", padding: "14px 26px" }}>
         <div style={{ maxWidth: "1440px", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{ width: "30px", height: "30px", background: "linear-gradient(135deg,#ea580c,#fbbf24)", borderRadius: "7px", display: "grid", placeItems: "center", fontSize: "0.9rem" }}>⬡</div>
+            <div style={{ width: "30px", height: "30px", background: "linear-gradient(135deg,#4B9CD3,#7EC8E3)", borderRadius: "7px", display: "grid", placeItems: "center", fontSize: "0.9rem" }}>⬡</div>
             <div>
-              <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", letterSpacing: "-0.3px", background: "linear-gradient(90deg,#fdba74,#fbbf24)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                ORDER FUSION
+              <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", letterSpacing: "-0.3px", background: "linear-gradient(90deg,#7EC8E3,#7EC8E3)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                R.A.M ENGINEERING
               </div>
-              <div style={{ color: "#374151", fontSize: "0.49rem", letterSpacing: "3px" }}>SPREADSHEET MERGER + NOTION DATABASE SYNC</div>
+              <div style={{ color: "#374151", fontSize: "0.49rem", letterSpacing: "3px" }}>ORDER FORM</div>
             </div>
           </div>
 
           {/* Notion database selector */}
           <div style={{ display: "flex", alignItems: "center", gap: "7px", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "5px", background: "#1c0a00", border: "1px solid #f9731640", borderRadius: "7px", padding: "5px 10px" }}>
-              <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#f97316", boxShadow: "0 0 5px #f97316" }} />
-              <span style={{ color: "#fdba74", fontSize: "0.62rem" }}>Notion Connected</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "5px", background: "#001B44", border: "1px solid #4B9CD340", borderRadius: "7px", padding: "5px 10px" }}>
+              <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#4B9CD3", boxShadow: "0 0 5px #4B9CD3" }} />
+              <span style={{ color: "#7EC8E3", fontSize: "0.62rem" }}>Notion Connected</span>
             </div>
             <button onClick={() => setShowDbPicker(true)}
-              style={{ background: "linear-gradient(135deg,#1c0a00,#2c1200)", color: "#fdba74", border: "1px solid #f9731640", borderRadius: "7px", padding: "5px 11px", fontSize: "0.62rem", cursor: "pointer", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
+              style={{ background: "linear-gradient(135deg,#001B44,#001B44)", color: "#7EC8E3", border: "1px solid #4B9CD340", borderRadius: "7px", padding: "5px 11px", fontSize: "0.62rem", cursor: "pointer", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
               🗄 {targetDb ? targetDb.title.length > 20 ? targetDb.title.slice(0, 20) + "…" : targetDb.title : "SELECT DATABASE"}
             </button>
             {targetDb && (
               <a href={`https://notion.so/${targetDb.id.replace(/-/g, "")}`} target="_blank" rel="noopener noreferrer"
-                style={{ background: "transparent", border: "1px solid #f9731630", color: "#f97316", borderRadius: "7px", padding: "5px 10px", fontSize: "0.6rem", textDecoration: "none", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
+                style={{ background: "transparent", border: "1px solid #4B9CD330", color: "#4B9CD3", borderRadius: "7px", padding: "5px 10px", fontSize: "0.6rem", textDecoration: "none", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
                 ↗ VIEW DB
               </a>
             )}
@@ -748,20 +748,20 @@ export default function App() {
       <div style={{ maxWidth: "1440px", margin: "0 auto", padding: "18px 26px" }}>
 
         {/* ── NOTION STATUS PANEL ── */}
-        <div style={{ background: notionReady ? "#1c0a00" : "#080d1a", border: `1px solid ${notionReady ? "#f9731630" : "#0d1220"}`, borderRadius: "14px", padding: "14px 18px", marginBottom: "14px" }}>
+        <div style={{ background: notionReady ? "#001B44" : "#080d1a", border: `1px solid ${notionReady ? "#4B9CD330" : "#0d1220"}`, borderRadius: "14px", padding: "14px 18px", marginBottom: "14px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <span style={{ fontSize: "1.2rem" }}>⬡</span>
               <div>
-                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.65rem", color: notionReady ? "#fdba74" : "#6b7280", letterSpacing: "1px" }}>
+                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.65rem", color: notionReady ? "#7EC8E3" : "#6b7280", letterSpacing: "1px" }}>
                   {notionReady ? "NOTION READY" : "NOTION SYNC"}
                 </div>
                 <div style={{ color: "#374151", fontSize: "0.58rem", marginTop: "1px" }}>
                   {!targetDb && (
-                    <span>Connected · <button onClick={() => setShowDbPicker(true)} style={{ background: "none", border: "none", color: "#f97316", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", padding: 0, textDecoration: "underline" }}>Select a database ↗</button></span>
+                    <span>Connected · <button onClick={() => setShowDbPicker(true)} style={{ background: "none", border: "none", color: "#4B9CD3", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", padding: 0, textDecoration: "underline" }}>Select a database ↗</button></span>
                   )}
                   {notionReady && (
-                    <>Pushing to <strong style={{ color: "#fdba74" }}>"{targetDb.title}"</strong> · {columnMapping ? `${Object.values(columnMapping).filter(Boolean).length} columns mapped` : "Map columns before pushing"}</>
+                    <>Pushing to <strong style={{ color: "#7EC8E3" }}>"{targetDb.title}"</strong> · {columnMapping ? `${Object.values(columnMapping).filter(Boolean).length} columns mapped` : "Map columns before pushing"}</>
                   )}
                 </div>
               </div>
@@ -769,13 +769,13 @@ export default function App() {
             <div style={{ display: "flex", gap: "7px", alignItems: "center" }}>
               {targetDb && (
                 <button onClick={() => setShowDbPicker(true)}
-                  style={{ background: "transparent", border: "1px solid #f9731640", color: "#f97316", borderRadius: "7px", padding: "6px 12px", fontSize: "0.6rem", cursor: "pointer", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
+                  style={{ background: "transparent", border: "1px solid #4B9CD340", color: "#4B9CD3", borderRadius: "7px", padding: "6px 12px", fontSize: "0.6rem", cursor: "pointer", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
                   {targetDb ? "CHANGE DB" : "PICK DB"}
                 </button>
               )}
               {notionReady && mergedData && (
                 <button onClick={openMapper} disabled={pushing}
-                  style={{ background: pushing ? "#1f2937" : "linear-gradient(135deg,#ea580c,#f97316)", color: pushing ? "#4b5563" : "#fff", border: "none", borderRadius: "7px", padding: "6px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.63rem", cursor: pushing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
+                  style={{ background: pushing ? "#1f2937" : "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: pushing ? "#4b5563" : "#fff", border: "none", borderRadius: "7px", padding: "6px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.63rem", cursor: pushing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
                   {pushing ? <><span className="spin">↻</span> PUSHING…</> : "↑ PUSH TO NOTION"}
                 </button>
               )}
@@ -793,10 +793,10 @@ export default function App() {
           {error && <div style={{ color: "#f87171", fontSize: "0.67rem", padding: "6px 11px", background: "#160404", borderRadius: "7px", marginBottom: "8px" }}>⚠ {error}</div>}
           <div style={{ display: "flex", alignItems: "center", gap: "9px", flexWrap: "wrap" }}>
             <button onClick={merge} disabled={loading}
-              style={{ background: loading ? "#111827" : "linear-gradient(135deg,#ea580c,#f97316)", color: loading ? "#4b5563" : "#fff", border: "none", borderRadius: "9px", padding: "8px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.7rem", letterSpacing: "1.5px", cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
+              style={{ background: loading ? "#111827" : "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: loading ? "#4b5563" : "#fff", border: "none", borderRadius: "9px", padding: "8px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.7rem", letterSpacing: "1.5px", cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
               {loading ? <><span className="spin">↻</span> PARSING…</> : "⬡ MERGE FILES"}
             </button>
-            {notionReady && mergedData && !columnMapping && <span style={{ color: "#f97316", fontSize: "0.58rem" }}>↑ Push to Notion to map columns</span>}
+            {notionReady && mergedData && !columnMapping && <span style={{ color: "#4B9CD3", fontSize: "0.58rem" }}>↑ Push to Notion to map columns</span>}
             {columnMapping && <span style={{ color: "#34d399", fontSize: "0.58rem" }}>✓ Mapping saved — push again to re-upload</span>}
           </div>
         </div>
@@ -815,8 +815,8 @@ export default function App() {
             {/* Stats */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(132px,1fr))", gap: "8px", marginBottom: "11px" }}>
               {[
-                { l: "TOTAL ROWS",  v: mergedData.length, c: "#f97316" },
-                { l: "COLUMNS",     v: headers.length,    c: "#fdba74" },
+                { l: "TOTAL ROWS",  v: mergedData.length, c: "#4B9CD3" },
+                { l: "COLUMNS",     v: headers.length,    c: "#7EC8E3" },
                 totalQty !== null && { l: "TOTAL QTY",   v: totalQty.toLocaleString(), c: "#a5b4fc" },
                 totalRevenue !== null && { l: "TOTAL VALUE", v: `$${totalRevenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, c: "#6ee7b7" },
               ].filter(Boolean).map((s) => (
@@ -830,7 +830,7 @@ export default function App() {
             {/* Column mapping display */}
             <div style={{ background: "#080d1a", border: "1px solid #0d1220", borderRadius: "11px", padding: "10px 14px", marginBottom: "10px" }}>
               <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.53rem", letterSpacing: "4px", color: "#374151", marginBottom: "7px" }}>
-                COLUMN TYPES {columnMapping && <span style={{ color: "#f97316", marginLeft: "10px" }}>→ NOTION MAPPING ACTIVE</span>}
+                COLUMN TYPES {columnMapping && <span style={{ color: "#4B9CD3", marginLeft: "10px" }}>→ NOTION MAPPING ACTIVE</span>}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
                 {headers.map((h) => {
@@ -902,13 +902,13 @@ export default function App() {
                   <span style={{ color: "#1f2937", fontSize: "0.56rem" }}>{mergedData.length} rows</span>
                   {notionReady && (
                     <button onClick={openMapper} disabled={pushing}
-                      style={{ background: pushing ? "#1f2937" : "linear-gradient(135deg,#ea580c,#f97316)", color: pushing ? "#4b5563" : "#fff", border: "none", borderRadius: "8px", padding: "7px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.65rem", cursor: pushing ? "not-allowed" : "pointer" }}>
+                      style={{ background: pushing ? "#1f2937" : "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: pushing ? "#4b5563" : "#fff", border: "none", borderRadius: "8px", padding: "7px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.65rem", cursor: pushing ? "not-allowed" : "pointer" }}>
                       ↑ PUSH TO NOTION
                     </button>
                   )}
                   {!notionReady && (
                     <button onClick={() => setShowDbPicker(true)}
-                      style={{ background: "transparent", border: "1px solid #f9731640", color: "#f97316", borderRadius: "8px", padding: "7px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.65rem", cursor: "pointer" }}>
+                      style={{ background: "transparent", border: "1px solid #4B9CD340", color: "#4B9CD3", borderRadius: "8px", padding: "7px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.65rem", cursor: "pointer" }}>
                       ⬡ SELECT DATABASE TO PUSH
                     </button>
                   )}
@@ -922,7 +922,7 @@ export default function App() {
                 {!targetDb && (
                   <div style={{ textAlign: "center", padding: "40px", color: "#374151" }}>
                     <div style={{ fontFamily: "'Syne',sans-serif", fontSize: "0.6rem", letterSpacing: "3px", marginBottom: "14px" }}>SELECT A DATABASE</div>
-                    <button onClick={() => setShowDbPicker(true)} style={{ background: "linear-gradient(135deg,#ea580c,#f97316)", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: "pointer" }}>
+                    <button onClick={() => setShowDbPicker(true)} style={{ background: "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: "pointer" }}>
                       PICK DATABASE
                     </button>
                   </div>
@@ -930,7 +930,7 @@ export default function App() {
                 {notionReady && !columnMapping && (
                   <div style={{ textAlign: "center", padding: "40px", color: "#374151" }}>
                     <div style={{ fontFamily: "'Syne',sans-serif", fontSize: "0.6rem", letterSpacing: "3px", marginBottom: "14px" }}>NO MAPPING YET</div>
-                    <button onClick={openMapper} style={{ background: "linear-gradient(135deg,#ea580c,#f97316)", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: "pointer" }}>
+                    <button onClick={openMapper} style={{ background: "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: "pointer" }}>
                       MAP COLUMNS NOW
                     </button>
                   </div>
@@ -943,11 +943,11 @@ export default function App() {
                       const propType = notionProp && notionSchema[notionProp]?.type;
                       const meta = propType ? NOTION_PROP_META[propType] : null;
                       return (
-                        <div key={h} style={{ display: "flex", alignItems: "center", gap: "10px", background: notionProp ? "#1c0a00" : "#06090f", border: `1px solid ${notionProp ? "#f9731630" : "#1f2937"}`, borderRadius: "9px", padding: "9px 12px" }}>
+                        <div key={h} style={{ display: "flex", alignItems: "center", gap: "10px", background: notionProp ? "#001B44" : "#06090f", border: `1px solid ${notionProp ? "#4B9CD330" : "#1f2937"}`, borderRadius: "9px", padding: "9px 12px" }}>
                           <span style={{ color: "#d1d5db", fontSize: "0.72rem", fontFamily: "monospace", flex: "0 0 180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h}</span>
                           <span style={{ color: "#374151" }}>→</span>
                           {notionProp ? (
-                            <span style={{ color: meta?.color || "#f97316", fontSize: "0.68rem", fontFamily: "monospace" }}>{meta?.icon} {notionProp} <span style={{ color: "#374151" }}>({propType})</span></span>
+                            <span style={{ color: meta?.color || "#4B9CD3", fontSize: "0.68rem", fontFamily: "monospace" }}>{meta?.icon} {notionProp} <span style={{ color: "#374151" }}>({propType})</span></span>
                           ) : (
                             <span style={{ color: "#374151", fontSize: "0.65rem" }}>skipped</span>
                           )}
@@ -955,11 +955,11 @@ export default function App() {
                       );
                     })}
                     <div style={{ marginTop: "10px", display: "flex", gap: "8px" }}>
-                      <button onClick={openMapper} style={{ background: "transparent", border: "1px solid #f9731640", color: "#f97316", borderRadius: "8px", padding: "7px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.63rem", cursor: "pointer" }}>
+                      <button onClick={openMapper} style={{ background: "transparent", border: "1px solid #4B9CD340", color: "#4B9CD3", borderRadius: "8px", padding: "7px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.63rem", cursor: "pointer" }}>
                         ✎ EDIT MAPPING
                       </button>
                       <button onClick={() => pushToNotion(columnMapping)} disabled={pushing}
-                        style={{ background: "linear-gradient(135deg,#ea580c,#f97316)", color: "#fff", border: "none", borderRadius: "8px", padding: "7px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.63rem", cursor: "pointer" }}>
+                        style={{ background: "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: "#fff", border: "none", borderRadius: "8px", padding: "7px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.63rem", cursor: "pointer" }}>
                         ↑ RE-PUSH ALL ROWS
                       </button>
                     </div>
@@ -976,7 +976,7 @@ export default function App() {
             <div style={{ fontSize: "1.9rem", marginBottom: "10px", opacity: 0.35 }}>⬡</div>
             <div style={{ fontFamily: "'Syne',sans-serif", fontSize: "0.58rem", letterSpacing: "4px", marginBottom: "14px" }}>THE LOOP</div>
             <div style={{ color: "#1f2937", fontSize: "0.64rem", lineHeight: 2.3, maxWidth: "460px", margin: "0 auto", textAlign: "left" }}>
-              <div>① <span style={{ color: "#f97316" }}>Select database</span> → pick which Notion DB to push to</div>
+              <div>① <span style={{ color: "#4B9CD3" }}>Select database</span> → pick which Notion DB to push to</div>
               <div>② <span style={{ color: "#34d399" }}>Upload files</span> → Excel or CSV, one or two files</div>
               <div>③ <span style={{ color: "#818cf8" }}>Map columns</span> → match spreadsheet cols to Notion properties</div>
               <div>④ <span style={{ color: "#f472b6" }}>Push</span> → rows become pages in your Notion database</div>
