@@ -775,7 +775,7 @@ export default function App() {
               </div>
             </div>
             <div style={{ display: "flex", gap: "7px", alignItems: "center" }}>
-              {notionToken && (
+              {targetDb && (
                 <button onClick={() => setShowDbPicker(true)}
                   style={{ background: "transparent", border: "1px solid #f9731640", color: "#f97316", borderRadius: "7px", padding: "6px 12px", fontSize: "0.6rem", cursor: "pointer", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
                   {targetDb ? "CHANGE DB" : "PICK DB"}
