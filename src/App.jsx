@@ -6,11 +6,11 @@ import * as XLSX from "xlsx";
 // All Notion API calls go through /.netlify/functions/notion
 // to avoid CORS errors in the browser.
 // ─────────────────────────────────────────────────────────────────────────────
-async function notionRequest({ path, method = "GET", body, token }) {
+async function notionRequest({ path, method = "GET", body }) {
   const res = await fetch("/.netlify/functions/notion", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path, method, body, token }),
+    body: JSON.stringify({ path, method, body }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.message || data?.error || `Notion error ${res.status}`);
@@ -18,29 +18,27 @@ async function notionRequest({ path, method = "GET", body, token }) {
 }
 
 // Fetch all databases the integration has access to
-async function fetchNotionDatabases(token) {
+async function fetchNotionDatabases() {
   const data = await notionRequest({
     path: "/search",
     method: "POST",
     body: { filter: { value: "database", property: "object" }, page_size: 50 },
-    token,
   });
   return data.results || [];
 }
 
 // Fetch properties schema for a specific database
-async function fetchDatabaseSchema(token, databaseId) {
-  const data = await notionRequest({ path: `/databases/${databaseId}`, token });
+async function fetchDatabaseSchema(databaseId) {
+  const data = await notionRequest({ path: `/databases/${databaseId}` });
   return data.properties || {};
 }
 
 // Push a single row as a new Notion page in the database
-async function createNotionPage(token, databaseId, properties) {
+async function createNotionPage(databaseId, properties) {
   return notionRequest({
     path: "/pages",
     method: "POST",
     body: { parent: { database_id: databaseId }, properties },
-    token,
   });
 }
 
@@ -291,14 +289,14 @@ function NotionSetupModal({ onSave, onClose }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // NOTION DATABASE PICKER MODAL
 // ─────────────────────────────────────────────────────────────────────────────
-function DatabasePickerModal({ token, onSelect, onClose }) {
+function DatabasePickerModal({ onSelect, onClose }) {
   const [databases, setDatabases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedDb, setSelectedDb] = useState(null);
 
   useEffect(() => {
-    fetchNotionDatabases(token)
+    fetchNotionDatabases()
       .then((dbs) => { setDatabases(dbs); setLoading(false); })
       .catch((e) => { setError(e.message); setLoading(false); });
   }, [token]);
@@ -525,8 +523,6 @@ export default function App() {
   const [parseInfo, setParseInfo] = useState([]);
 
   // Notion
-  const [notionToken, setNotionToken]       = useState(() => localStorage.getItem("notionToken") || "");
-  const [showSetup, setShowSetup]           = useState(false);
   const [showDbPicker, setShowDbPicker]     = useState(false);
   const [targetDb, setTargetDb]             = useState(() => {
     try { return JSON.parse(localStorage.getItem("notionDb") || "null"); } catch { return null; }
@@ -552,34 +548,19 @@ export default function App() {
     else localStorage.removeItem("notionDb");
   }, [targetDb]);
 
-  // ── Connect Notion ──
-  const connectNotion = useCallback(async (token) => {
-    setNotionToken(token);
-    setShowSetup(false);
-  }, []);
-
-  const disconnectNotion = () => {
-    setNotionToken("");
-    localStorage.removeItem("notionToken");
-    setTargetDb(null);
-    setNotionSchema(null);
-    setColumnMapping(null);
-  };
-
   // ── Select Database ──
   const handleDbSelected = useCallback(async (db) => {
     const title = db.title?.[0]?.plain_text || "Untitled";
     setTargetDb({ id: db.id, title });
     setShowDbPicker(false);
     setColumnMapping(null);
-    // Fetch schema
     try {
-      const schema = await fetchDatabaseSchema(notionToken, db.id);
+      const schema = await fetchDatabaseSchema(db.id);
       setNotionSchema(schema);
     } catch (e) {
       setError("Could not load database schema: " + e.message);
     }
-  }, [notionToken]);
+  }, []);
 
   // ── Parse & Merge ──
   const merge = useCallback(async () => {
@@ -628,14 +609,13 @@ export default function App() {
     setLoading(false);
   }, [file1, file2]);
 
-  // ── Open column mapper (load schema first if needed) ──
+  // ── Open column mapper ──
   const openMapper = useCallback(async () => {
-    if (!notionToken) { setShowSetup(true); return; }
     if (!targetDb) { setShowDbPicker(true); return; }
     let schema = notionSchema;
     if (!schema) {
       try {
-        schema = await fetchDatabaseSchema(notionToken, targetDb.id);
+        schema = await fetchDatabaseSchema(targetDb.id);
         setNotionSchema(schema);
       } catch (e) {
         setError("Could not load schema: " + e.message);
@@ -643,7 +623,7 @@ export default function App() {
       }
     }
     setShowMapper(true);
-  }, [notionToken, targetDb, notionSchema]);
+  }, [targetDb, notionSchema]);
 
   // ── Push rows to Notion ──
   const pushToNotion = useCallback(async (mapping) => {
@@ -668,7 +648,7 @@ export default function App() {
         if (built) properties[notionProp] = built;
       }
       try {
-        await createNotionPage(notionToken, targetDb.id, properties);
+        await createNotionPage(targetDb.id, properties);
         pushed++;
       } catch {
         failed++;
@@ -677,7 +657,7 @@ export default function App() {
     }
 
     setPushing(false);
-  }, [mergedData, targetDb, notionSchema, notionToken]);
+  }, [mergedData, targetDb, notionSchema]);
 
   // ── Sort ──
   const handleSort = (col) => {
@@ -699,7 +679,7 @@ export default function App() {
   const totalRevenue = mergedData && floatCols[0] ? mergedData.reduce((s, r) => s + (parseFloat(r[floatCols[0]]) || 0), 0) : null;
   const totalQty     = mergedData && intCols[0] ? mergedData.reduce((s, r) => s + (parseInt(r[intCols[0]]) || 0), 0) : null;
 
-  const notionReady = notionToken && targetDb;
+  const notionReady = !!targetDb;
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -723,8 +703,7 @@ export default function App() {
       `}</style>
 
       {/* Modals */}
-      {showSetup && <NotionSetupModal onSave={connectNotion} onClose={() => setShowSetup(false)} />}
-      {showDbPicker && notionToken && <DatabasePickerModal token={notionToken} onSelect={handleDbSelected} onClose={() => setShowDbPicker(false)} />}
+      {showDbPicker && <DatabasePickerModal onSelect={handleDbSelected} onClose={() => setShowDbPicker(false)} />}
       {showMapper && notionSchema && mergedData && (
         <ColumnMapperModal
           spreadsheetHeaders={headers}
@@ -754,29 +733,16 @@ export default function App() {
             </div>
           </div>
 
-          {/* Notion connection controls */}
+          {/* Notion database selector */}
           <div style={{ display: "flex", alignItems: "center", gap: "7px", flexWrap: "wrap" }}>
-            {notionToken ? (
-              <>
-                <div style={{ display: "flex", alignItems: "center", gap: "5px", background: "#1c0a00", border: "1px solid #f9731640", borderRadius: "7px", padding: "5px 10px" }}>
-                  <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#f97316", boxShadow: "0 0 5px #f97316" }} />
-                  <span style={{ color: "#fdba74", fontSize: "0.62rem" }}>Notion Connected</span>
-                </div>
-                <button onClick={() => setShowDbPicker(true)}
-                  style={{ background: "linear-gradient(135deg,#1c0a00,#2c1200)", color: "#fdba74", border: "1px solid #f9731640", borderRadius: "7px", padding: "5px 11px", fontSize: "0.62rem", cursor: "pointer", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
-                  🗄 {targetDb ? targetDb.title.length > 20 ? targetDb.title.slice(0, 20) + "…" : targetDb.title : "SELECT DATABASE"}
-                </button>
-                <button onClick={disconnectNotion}
-                  style={{ background: "transparent", border: "1px solid #1f2937", color: "#6b7280", borderRadius: "7px", padding: "5px 10px", fontSize: "0.6rem", cursor: "pointer", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
-                  DISCONNECT
-                </button>
-              </>
-            ) : (
-              <button onClick={() => setShowSetup(true)}
-                style={{ background: "linear-gradient(135deg,#ea580c,#f97316)", color: "#fff", border: "none", borderRadius: "7px", padding: "7px 14px", fontSize: "0.63rem", cursor: "pointer", fontFamily: "'Syne',sans-serif", fontWeight: 700, letterSpacing: "1px" }}>
-                ⬡ CONNECT NOTION
-              </button>
-            )}
+            <div style={{ display: "flex", alignItems: "center", gap: "5px", background: "#1c0a00", border: "1px solid #f9731640", borderRadius: "7px", padding: "5px 10px" }}>
+              <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#f97316", boxShadow: "0 0 5px #f97316" }} />
+              <span style={{ color: "#fdba74", fontSize: "0.62rem" }}>Notion Connected</span>
+            </div>
+            <button onClick={() => setShowDbPicker(true)}
+              style={{ background: "linear-gradient(135deg,#1c0a00,#2c1200)", color: "#fdba74", border: "1px solid #f9731640", borderRadius: "7px", padding: "5px 11px", fontSize: "0.62rem", cursor: "pointer", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
+              🗄 {targetDb ? targetDb.title.length > 20 ? targetDb.title.slice(0, 20) + "…" : targetDb.title : "SELECT DATABASE"}
+            </button>
             {targetDb && (
               <a href={`https://notion.so/${targetDb.id.replace(/-/g, "")}`} target="_blank" rel="noopener noreferrer"
                 style={{ background: "transparent", border: "1px solid #f9731630", color: "#f97316", borderRadius: "7px", padding: "5px 10px", fontSize: "0.6rem", textDecoration: "none", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
@@ -799,8 +765,7 @@ export default function App() {
                   {notionReady ? "NOTION READY" : "NOTION SYNC"}
                 </div>
                 <div style={{ color: "#374151", fontSize: "0.58rem", marginTop: "1px" }}>
-                  {!notionToken && "Connect your Notion integration to push data"}
-                  {notionToken && !targetDb && (
+                  {!targetDb && (
                     <span>Connected · <button onClick={() => setShowDbPicker(true)} style={{ background: "none", border: "none", color: "#f97316", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", padding: 0, textDecoration: "underline" }}>Select a database ↗</button></span>
                   )}
                   {notionReady && (
@@ -950,9 +915,9 @@ export default function App() {
                     </button>
                   )}
                   {!notionReady && (
-                    <button onClick={() => setShowSetup(true)}
+                    <button onClick={() => setShowDbPicker(true)}
                       style={{ background: "transparent", border: "1px solid #f9731640", color: "#f97316", borderRadius: "8px", padding: "7px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.65rem", cursor: "pointer" }}>
-                      ⬡ CONNECT NOTION TO PUSH
+                      ⬡ SELECT DATABASE TO PUSH
                     </button>
                   )}
                 </div>
@@ -962,16 +927,7 @@ export default function App() {
             {/* Notion mapping tab */}
             {activeTab === "notion" && (
               <div>
-                {!notionToken && (
-                  <div style={{ textAlign: "center", padding: "40px", color: "#374151" }}>
-                    <div style={{ fontSize: "1.5rem", marginBottom: "10px" }}>⬡</div>
-                    <div style={{ fontFamily: "'Syne',sans-serif", fontSize: "0.6rem", letterSpacing: "3px", marginBottom: "14px" }}>NOT CONNECTED</div>
-                    <button onClick={() => setShowSetup(true)} style={{ background: "linear-gradient(135deg,#ea580c,#f97316)", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: "pointer" }}>
-                      CONNECT NOTION
-                    </button>
-                  </div>
-                )}
-                {notionToken && !targetDb && (
+                {!targetDb && (
                   <div style={{ textAlign: "center", padding: "40px", color: "#374151" }}>
                     <div style={{ fontFamily: "'Syne',sans-serif", fontSize: "0.6rem", letterSpacing: "3px", marginBottom: "14px" }}>SELECT A DATABASE</div>
                     <button onClick={() => setShowDbPicker(true)} style={{ background: "linear-gradient(135deg,#ea580c,#f97316)", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: "pointer" }}>
@@ -1028,11 +984,10 @@ export default function App() {
             <div style={{ fontSize: "1.9rem", marginBottom: "10px", opacity: 0.35 }}>⬡</div>
             <div style={{ fontFamily: "'Syne',sans-serif", fontSize: "0.58rem", letterSpacing: "4px", marginBottom: "14px" }}>THE LOOP</div>
             <div style={{ color: "#1f2937", fontSize: "0.64rem", lineHeight: 2.3, maxWidth: "460px", margin: "0 auto", textAlign: "left" }}>
-              <div>① <span style={{ color: "#f97316" }}>Connect Notion</span> → paste your integration token</div>
-              <div>② <span style={{ color: "#fbbf24" }}>Select database</span> → pick which Notion DB to push to</div>
-              <div>③ <span style={{ color: "#34d399" }}>Upload files</span> → Excel or CSV, one or two files</div>
-              <div>④ <span style={{ color: "#818cf8" }}>Map columns</span> → match spreadsheet cols to Notion properties</div>
-              <div>⑤ <span style={{ color: "#f472b6" }}>Push</span> → rows become pages in your Notion database</div>
+              <div>① <span style={{ color: "#f97316" }}>Select database</span> → pick which Notion DB to push to</div>
+              <div>② <span style={{ color: "#34d399" }}>Upload files</span> → Excel or CSV, one or two files</div>
+              <div>③ <span style={{ color: "#818cf8" }}>Map columns</span> → match spreadsheet cols to Notion properties</div>
+              <div>④ <span style={{ color: "#f472b6" }}>Push</span> → rows become pages in your Notion database</div>
             </div>
           </div>
         )}
