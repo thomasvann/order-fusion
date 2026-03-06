@@ -75,9 +75,11 @@ function buildNotionProperty(value, propType) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TYPE DETECTION (same as before — used for display only)
-// ─────────────────────────────────────────────────────────────────────────────
+// Format header names: URL stays all-caps, everything else gets first letter capitalized
+function formatHeader(h) {
+  if (h.toLowerCase() === "url") return "URL";
+  return h.charAt(0).toUpperCase() + h.slice(1);
+}
 const isUrl = (v) =>
   typeof v === "string" &&
   (/^(https?:\/\/|www\.)/i.test(v.trim()) || /\.[a-z]{2,}\//i.test(v.trim()));
@@ -188,7 +190,7 @@ function parseFile(file) {
         const role = detectFirstRowRole(cleaned);
         let headers, dataRows;
         if (role === "header") {
-          headers = cleaned[0].map((h, i) => String(h ?? "").trim() || `Col ${i + 1}`);
+          headers = cleaned[0].map((h, i) => formatHeader(String(h ?? "").trim() || `Col ${i + 1}`));
           dataRows = cleaned.slice(1);
         } else {
           headers = cleaned[0].map((_, i) => `Col ${i + 1}`);
@@ -512,13 +514,9 @@ function PushProgressModal({ total, pushed, failed, onClose, done }) {
 // MAIN APP
 // ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
-  // Files — single drop zone only
+  // Files
   const [file1, setFile1] = useState(null);
-  const [uploadTimestamp, setUploadTimestamp] = useState(null);
-
-  // Order metadata
-  const [orderer, setOrderer] = useState("");
-  const [projectTeam, setProjectTeam] = useState("");
+  const [file2, setFile2] = useState(null);
 
   // Parsed / merged data
   const [mergedData, setMergedData] = useState(null);
@@ -560,41 +558,50 @@ export default function App() {
 
   // ── Parse & Merge ──
   const merge = useCallback(async () => {
-    if (!file1) { setError("Upload a file first."); return; }
+    if (!file1 && !file2) { setError("Upload at least one file."); return; }
     setLoading(true); setError(null); setColumnMapping(null);
     try {
-      const r1 = await parseFile(file1);
-      const hdrs = [...r1.headers, "Timestamp", "Orderer", "Project Team"];
+      let r1 = null, r2 = null;
+      if (file1) r1 = await parseFile(file1);
+      if (file2) r2 = await parseFile(file2);
 
-      const ts = uploadTimestamp ? uploadTimestamp.toLocaleString() : new Date().toLocaleString();
+      const allHeaderSet = new Set();
+      if (r1) r1.headers.forEach((h) => allHeaderSet.add(h));
+      if (r2) r2.headers.forEach((h) => allHeaderSet.add(h));
+      const hdrs = [...allHeaderSet];
 
-      const rows1 = r1.dataRows
-        .filter((row) => row.some((c) => c !== ""))
-        .map((row) => {
-          const obj = { _source: r1.name, _origin: "file1" };
-          r1.headers.forEach((h) => { const i = r1.headers.indexOf(h); obj[h] = i !== -1 ? row[i] : ""; });
-          obj["Timestamp"] = ts;
-          obj["Orderer"] = orderer;
-          obj["Project Team"] = projectTeam;
-          return obj;
-        });
+      const buildRows = (result, origin) => {
+        if (!result || !result.dataRows.length) return [];
+        return result.dataRows
+          .filter((row) => row.some((c) => c !== ""))
+          .map((row) => {
+            const obj = { _source: result.name, _origin: origin };
+            hdrs.forEach((h) => { const i = result.headers.indexOf(h); obj[h] = i !== -1 ? row[i] : ""; });
+            return obj;
+          });
+      };
+
+      const rows1 = buildRows(r1, "file1");
+      const rows2 = buildRows(r2, "file2");
+      const merged = [...rows1, ...rows2];
 
       const types = {};
-      hdrs.forEach((h) => { types[h] = inferColType(h, rows1.map((r) => String(r[h] ?? "").trim())); });
-      types["Timestamp"] = "text";
-      types["Orderer"] = "text";
-      types["Project Team"] = "text";
+      hdrs.forEach((h) => { types[h] = inferColType(h, merged.map((r) => String(r[h] ?? "").trim())); });
+
+      const info = [];
+      if (r1) info.push(`File 1: ${r1.dataRows.length} rows`);
+      if (r2) info.push(`File 2: ${r2.dataRows.length} rows`);
 
       setHeaders(hdrs);
       setColTypes(types);
-      setMergedData(rows1);
-      setParseInfo([`File: ${r1.dataRows.length} rows`, `Uploaded: ${ts}`]);
+      setMergedData(merged);
+      setParseInfo(info);
       setSortCol(null);
     } catch (e) {
       setError("Parse error: " + e.message);
     }
     setLoading(false);
-  }, [file1, uploadTimestamp, orderer, projectTeam]);
+  }, [file1, file2]);
 
   // ── Open column mapper ──
   const openMapper = useCallback(async () => {
@@ -780,47 +787,16 @@ export default function App() {
 
         {/* ── UPLOAD ── */}
         <div style={{ background: "#080d1a", border: "1px solid #0d1220", borderRadius: "16px", padding: "16px", marginBottom: "14px" }}>
-          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.55rem", letterSpacing: "4px", color: "#374151", marginBottom: "10px" }}>UPLOAD ORDER FILE</div>
-
-          {/* Single drop zone */}
-          <div style={{ marginBottom: "12px" }}>
-            <DropZone label="Drop your Excel or CSV file here" sublabel=".xlsx / .xls / .csv" icon="📗" accept=".csv,.xlsx,.xls" onFile={(f) => { setFile1(f); setUploadTimestamp(new Date()); }} file={file1} />
+          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.55rem", letterSpacing: "4px", color: "#374151", marginBottom: "10px" }}>UPLOAD FILES</div>
+          <div style={{ display: "flex", gap: "10px", marginBottom: "10px", flexWrap: "wrap" }}>
+            <DropZone label="First file (.xlsx / .xls / .csv)" sublabel="Excel or CSV export" icon="📗" accept=".csv,.xlsx,.xls" onFile={setFile1} file={file1} />
+            <DropZone label="Second file to merge (optional)" sublabel="Rows appended below first file" icon="📊" accept=".xlsx,.xls,.csv" onFile={setFile2} file={file2} />
           </div>
-
-          {/* Orderer + Project Team */}
-          <div style={{ display: "flex", gap: "10px", marginBottom: "12px", flexWrap: "wrap" }}>
-            <div style={{ flex: 1, minWidth: "180px" }}>
-              <div style={{ color: "#6b7280", fontSize: "0.55rem", letterSpacing: "2px", fontFamily: "'Syne',sans-serif", fontWeight: 700, marginBottom: "5px" }}>ORDERER</div>
-              <input
-                value={orderer}
-                onChange={(e) => setOrderer(e.target.value)}
-                placeholder="Your name"
-                style={{ width: "100%", background: "#04060f", border: "1px solid #374151", borderRadius: "8px", padding: "8px 12px", color: "#f9fafb", fontSize: "0.72rem", fontFamily: "monospace", outline: "none", boxSizing: "border-box" }}
-              />
-            </div>
-            <div style={{ flex: 1, minWidth: "180px" }}>
-              <div style={{ color: "#6b7280", fontSize: "0.55rem", letterSpacing: "2px", fontFamily: "'Syne',sans-serif", fontWeight: 700, marginBottom: "5px" }}>PROJECT TEAM</div>
-              <input
-                value={projectTeam}
-                onChange={(e) => setProjectTeam(e.target.value)}
-                placeholder="Team or project name"
-                style={{ width: "100%", background: "#04060f", border: "1px solid #374151", borderRadius: "8px", padding: "8px 12px", color: "#f9fafb", fontSize: "0.72rem", fontFamily: "monospace", outline: "none", boxSizing: "border-box" }}
-              />
-            </div>
-          </div>
-
-          {/* Timestamp display */}
-          {uploadTimestamp && (
-            <div style={{ color: "#4B9CD3", fontSize: "0.6rem", marginBottom: "10px", fontFamily: "monospace" }}>
-              🕐 Uploaded: {uploadTimestamp.toLocaleString()}
-            </div>
-          )}
-
           {error && <div style={{ color: "#f87171", fontSize: "0.67rem", padding: "6px 11px", background: "#160404", borderRadius: "7px", marginBottom: "8px" }}>⚠ {error}</div>}
           <div style={{ display: "flex", alignItems: "center", gap: "9px", flexWrap: "wrap" }}>
             <button onClick={merge} disabled={loading}
-              style={{ background: loading ? "#111827" : "linear-gradient(135deg,#4B9CD3,#7EC8E3)", color: loading ? "#4b5563" : "#fff", border: "none", borderRadius: "9px", padding: "8px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.7rem", letterSpacing: "1.5px", cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
-              {loading ? <><span className="spin">↻</span> PARSING…</> : "⬡ PROCESS FILE"}
+              style={{ background: loading ? "#111827" : "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: loading ? "#4b5563" : "#fff", border: "none", borderRadius: "9px", padding: "8px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.7rem", letterSpacing: "1.5px", cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
+              {loading ? <><span className="spin">↻</span> PARSING…</> : "⬡ MERGE FILES"}
             </button>
             {notionReady && mergedData && !columnMapping && <span style={{ color: "#4B9CD3", fontSize: "0.58rem" }}>↑ Push to Notion to map columns</span>}
             {columnMapping && <span style={{ color: "#34d399", fontSize: "0.58rem" }}>✓ Mapping saved — push again to re-upload</span>}
@@ -1002,11 +978,10 @@ export default function App() {
             <div style={{ fontSize: "1.9rem", marginBottom: "10px", opacity: 0.35 }}>⬡</div>
             <div style={{ fontFamily: "'Syne',sans-serif", fontSize: "0.58rem", letterSpacing: "4px", marginBottom: "14px" }}>THE LOOP</div>
             <div style={{ color: "#1f2937", fontSize: "0.64rem", lineHeight: 2.3, maxWidth: "460px", margin: "0 auto", textAlign: "left" }}>
-              <div>① <span style={{ color: "#4B9CD3" }}>Drop your Excel file</span> → single upload</div>
-              <div>② <span style={{ color: "#7EC8E3" }}>Enter orderer + project team</span> → saved with every row</div>
-              <div>③ <span style={{ color: "#34d399" }}>Process file</span> → timestamp auto-captured</div>
-              <div>④ <span style={{ color: "#818cf8" }}>Map columns</span> → match to Notion properties</div>
-              <div>⑤ <span style={{ color: "#f472b6" }}>Push</span> → rows become pages in Notion</div>
+              <div>① <span style={{ color: "#4B9CD3" }}>Select database</span> → pick which Notion DB to push to</div>
+              <div>② <span style={{ color: "#34d399" }}>Upload files</span> → Excel or CSV, one or two files</div>
+              <div>③ <span style={{ color: "#818cf8" }}>Map columns</span> → match spreadsheet cols to Notion properties</div>
+              <div>④ <span style={{ color: "#f472b6" }}>Push</span> → rows become pages in your Notion database</div>
             </div>
           </div>
         )}
