@@ -7,7 +7,7 @@ import * as XLSX from "xlsx";
 // to avoid CORS errors in the browser.
 // ─────────────────────────────────────────────────────────────────────────────
 async function notionRequest({ path, method = "GET", body }) {
-  const res = await fetch("/.netlify/functions/notion", {
+  const res = await fetch("/api/notion", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path, method, body }),
