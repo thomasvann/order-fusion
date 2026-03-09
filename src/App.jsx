@@ -418,6 +418,11 @@ function ColumnMapperModal({ spreadsheetHeaders, notionSchema, onConfirm, onClos
       // Exact match first
       const exact = Object.keys(notionSchema).find((k) => k.toLowerCase() === lower);
       if (exact) { mapping[h] = exact; return; }
+      // Timestamp column: always map to a Notion property named "Timestamp" (any case)
+      if (lower === "timestamp") {
+        const tsProp = Object.keys(notionSchema).find((k) => k.toLowerCase() === "timestamp");
+        if (tsProp) { mapping[h] = tsProp; return; }
+      }
       // For URL-like column headers, prefer Notion properties of type "url"
       const looksLikeUrl = /url|link|href|website|site/i.test(lower);
       if (looksLikeUrl) {
