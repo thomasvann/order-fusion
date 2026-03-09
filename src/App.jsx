@@ -689,15 +689,26 @@ export default function App() {
         sourceName = file1.name;
       }
 
-      const hdrs = [...r1.headers, "Timestamp", "Orderer", "Project Team"];
+      // Include "Spreadsheet Link" column only when a Google Sheet URL was used
+      const hasSheetLink = hasUrl && sheetUrl.trim();
+      const hdrs = [
+        ...r1.headers,
+        ...(hasSheetLink ? ["Spreadsheet Link"] : []),
+        "Timestamp", "Orderer", "Project Team",
+      ];
       const ts = uploadTimestamp ? uploadTimestamp.toLocaleString() : new Date().toLocaleString();
+
+      // Build a clean share URL (strip /export params so it opens the sheet nicely)
+      const cleanSheetUrl = hasSheetLink
+        ? sheetUrl.trim().split("/export")[0].replace(/\/(edit|pub|view).*$/, "")
+        : "";
 
       const rows1 = r1.dataRows
         .filter((row) => row.some((c) => c !== ""))
         .map((row) => {
           const obj = { _source: sourceName, _origin: "file1" };
-          // Use index directly — avoid O(n²) indexOf inside map
           r1.headers.forEach((h, i) => { obj[h] = row[i] ?? ""; });
+          if (hasSheetLink) obj["Spreadsheet Link"] = cleanSheetUrl;
           obj["Timestamp"] = ts;
           obj["Orderer"] = orderer;
           obj["Project Team"] = projectTeam;
@@ -706,6 +717,7 @@ export default function App() {
 
       const types = {};
       hdrs.forEach((h) => { types[h] = inferColType(h, rows1.map((r) => String(r[h] ?? "").trim())); });
+      if (hasSheetLink) types["Spreadsheet Link"] = "url";
       types["Timestamp"] = "text";
       types["Orderer"] = "text";
       types["Project Team"] = "text";
@@ -758,6 +770,18 @@ export default function App() {
         if (!propSchema) continue;
         const built = buildNotionProperty(row[spreadsheetCol], propSchema.type);
         if (built) properties[notionProp] = built;
+      }
+
+      // Always push Spreadsheet Link directly — never relies on user mapping
+      const slValue = row["Spreadsheet Link"];
+      if (slValue) {
+        const slPropName =
+          notionSchema["Spreadsheet Link"] ? "Spreadsheet Link" :
+          Object.keys(notionSchema).find((k) => k.toLowerCase() === "spreadsheet link");
+        if (slPropName && notionSchema[slPropName]) {
+          const built = buildNotionProperty(slValue, notionSchema[slPropName].type || "url");
+          if (built) properties[slPropName] = built;
+        }
       }
       try {
         await createNotionPage(targetDb.id, properties);
@@ -818,7 +842,7 @@ export default function App() {
       {showDbPicker && <DatabasePickerModal onSelect={handleDbSelected} onClose={() => setShowDbPicker(false)} />}
       {showMapper && notionSchema && mergedData && (
         <ColumnMapperModal
-          spreadsheetHeaders={headers}
+          spreadsheetHeaders={headers.filter(h => h !== "Spreadsheet Link")}
           notionSchema={notionSchema}
           onConfirm={pushToNotion}
           onClose={() => setShowMapper(false)}
