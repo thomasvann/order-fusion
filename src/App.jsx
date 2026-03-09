@@ -84,9 +84,15 @@ function formatHeader(h) {
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPE DETECTION (same as before — used for display only)
 // ─────────────────────────────────────────────────────────────────────────────
-const isUrl = (v) =>
-  typeof v === "string" &&
-  (/^(https?:\/\/|www\.)/i.test(v.trim()) || /\.[a-z]{2,}\//i.test(v.trim()));
+const isUrl = (v) => {
+  if (typeof v !== "string") return false;
+  const s = v.trim();
+  return (
+    /^https?:\/\//i.test(s) ||
+    /^www\./i.test(s) ||
+    /^[a-z0-9-]+\.[a-z]{2,}(\/|$)/i.test(s)
+  );
+};
 const isInteger = (v) => {
   const n = Number(v);
   return v !== "" && v != null && !isNaN(n) && Number.isInteger(n);
@@ -176,17 +182,49 @@ const NOTION_PROP_META = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FILE PARSER
+// CSV files are read as text to preserve URLs and special characters.
+// Excel files are read as ArrayBuffer via SheetJS.
 // ─────────────────────────────────────────────────────────────────────────────
+function parseCsvText(text) {
+  // Robust CSV parser: handles quoted fields, embedded commas, newlines
+  const rows = [];
+  let row = [], field = "", inQuote = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (inQuote) {
+      if (ch === '"' && next === '"') { field += '"'; i++; }
+      else if (ch === '"') { inQuote = false; }
+      else { field += ch; }
+    } else {
+      if (ch === '"') { inQuote = true; }
+      else if (ch === ',') { row.push(field); field = ""; }
+      else if (ch === '\r' && next === '\n') { row.push(field); rows.push(row); row = []; field = ""; i++; }
+      else if (ch === '\n' || ch === '\r') { row.push(field); rows.push(row); row = []; field = ""; }
+      else { field += ch; }
+    }
+  }
+  if (field || row.length) { row.push(field); rows.push(row); }
+  return rows.filter((r) => r.some((c) => c.trim() !== ""));
+}
+
 function parseFile(file) {
+  const isCsv = file.name.toLowerCase().endsWith(".csv");
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const uint8 = new Uint8Array(e.target.result);
-        const wb = XLSX.read(uint8, { type: "array" });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-        const cleaned = raw.filter((r) => r.some((c) => c !== ""));
+        let raw;
+        if (isCsv) {
+          // Read CSV as text to preserve URLs exactly
+          raw = parseCsvText(e.target.result);
+        } else {
+          const uint8 = new Uint8Array(e.target.result);
+          const wb = XLSX.read(uint8, { type: "array" });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+        }
+        const cleaned = raw.filter((r) => r.some((c) => String(c).trim() !== ""));
         if (!cleaned.length) {
           resolve({ name: file.name, headers: [], dataRows: [] });
           return;
@@ -206,7 +244,9 @@ function parseFile(file) {
       }
     };
     reader.onerror = reject;
-    reader.readAsArrayBuffer(file);
+    // CSV → text, Excel → ArrayBuffer
+    if (isCsv) reader.readAsText(file);
+    else reader.readAsArrayBuffer(file);
   });
 }
 
@@ -305,7 +345,7 @@ function DatabasePickerModal({ onSelect, onClose }) {
     fetchNotionDatabases()
       .then((dbs) => { setDatabases(dbs); setLoading(false); })
       .catch((e) => { setError(e.message); setLoading(false); });
-  }, [token]);
+  }, []);
 
   const confirm = () => {
     if (!selectedDb) return;
@@ -375,10 +415,16 @@ function ColumnMapperModal({ spreadsheetHeaders, notionSchema, onConfirm, onClos
     const mapping = {};
     spreadsheetHeaders.forEach((h) => {
       const lower = h.toLowerCase().trim();
-      // Try exact match first
+      // Exact match first
       const exact = Object.keys(notionSchema).find((k) => k.toLowerCase() === lower);
       if (exact) { mapping[h] = exact; return; }
-      // Try partial match
+      // For URL-like column headers, prefer Notion properties of type "url"
+      const looksLikeUrl = /url|link|href|website|site/i.test(lower);
+      if (looksLikeUrl) {
+        const urlProp = Object.keys(notionSchema).find((k) => notionSchema[k].type === "url");
+        if (urlProp) { mapping[h] = urlProp; return; }
+      }
+      // Partial match
       const partial = Object.keys(notionSchema).find(
         (k) => k.toLowerCase().includes(lower) || lower.includes(k.toLowerCase())
       );
@@ -407,6 +453,17 @@ function ColumnMapperModal({ spreadsheetHeaders, notionSchema, onConfirm, onClos
           <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", color: "#7EC8E3" }}>Map Columns → Notion</div>
           <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#6b7280", cursor: "pointer", fontSize: "1.2rem" }}>✕</button>
         </div>
+
+        {/* Double-check banner */}
+        <div style={{ background: "#1a1000", border: "1px solid #f59e0b44", borderRadius: "9px", padding: "9px 13px", marginBottom: "14px", display: "flex", alignItems: "flex-start", gap: "8px" }}>
+          <span style={{ fontSize: "0.9rem", flexShrink: 0 }}>⚠️</span>
+          <div style={{ fontSize: "0.62rem", color: "#fcd34d", lineHeight: 1.7 }}>
+            <strong style={{ color: "#f59e0b", fontFamily: "'Syne',sans-serif", letterSpacing: "1px" }}>DOUBLE-CHECK YOUR COLUMN MAPPING</strong>
+            <br />
+            Auto-mapping matched columns by name — please verify each one before pushing. URL columns in particular should be mapped to a <strong>url</strong> Notion property, not <em>rich_text</em>.
+          </div>
+        </div>
+
         <div style={{ color: "#6b7280", fontSize: "0.62rem", marginBottom: "18px" }}>
           Match each spreadsheet column to a Notion database property. Unmapped columns are skipped.
         </div>
@@ -443,6 +500,10 @@ function ColumnMapperModal({ spreadsheetHeaders, notionSchema, onConfirm, onClos
                       );
                     })}
                   </select>
+                  {/* Warn if a URL-like column is mapped to rich_text */}
+                  {currentVal && notionProp?.type === "rich_text" && /url|link|href|website/i.test(h) && (
+                    <div style={{ color: "#f59e0b", fontSize: "0.52rem", marginTop: "3px" }}>⚠ This looks like a URL column — consider mapping to a <strong>url</strong> property</div>
+                  )}
                 </div>
 
                 {/* Type badge */}
@@ -787,6 +848,14 @@ export default function App() {
         {/* ── UPLOAD ── */}
         <div style={{ background: "#080d1a", border: "1px solid #0d1220", borderRadius: "16px", padding: "16px", marginBottom: "14px" }}>
           <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.55rem", letterSpacing: "4px", color: "#374151", marginBottom: "10px" }}>UPLOAD ORDER FILE</div>
+
+          {/* Column mapping reminder */}
+          <div style={{ background: "#0d1008", border: "1px solid #4ade8040", borderRadius: "9px", padding: "9px 13px", marginBottom: "13px", display: "flex", alignItems: "center", gap: "9px" }}>
+            <span style={{ fontSize: "0.85rem", flexShrink: 0 }}>💡</span>
+            <div style={{ fontSize: "0.61rem", color: "#86efac", lineHeight: 1.7 }}>
+              After uploading and processing your file, <strong style={{ color: "#4ade80" }}>verify that all columns are mapped correctly</strong> before pushing to Notion — especially URL, number, and date fields, which may need manual adjustment.
+            </div>
+          </div>
 
           {/* Single drop zone */}
           <div style={{ marginBottom: "12px" }}>
