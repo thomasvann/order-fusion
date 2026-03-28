@@ -615,6 +615,13 @@ export default function App() {
   const [notionSchema, setNotionSchema]     = useState(null);
   const [columnMapping, setColumnMapping]   = useState(null);
 
+  // Auto-load schema on mount so users never have to select a database manually
+  useEffect(() => {
+    fetchDatabaseSchema("31a9b1412417803abaf5e164229a0d54")
+      .then((schema) => setNotionSchema(schema))
+      .catch((e) => setError("Could not load Notion schema: " + e.message));
+  }, []);
+
   // Push progress
   const [pushing, setPushing]         = useState(false);
   const [pushProgress, setPushProgress] = useState(null); // { total, pushed, failed }
