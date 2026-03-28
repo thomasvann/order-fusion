@@ -146,8 +146,8 @@ function detectFirstRowRole(rows) {
     const bur = bv.filter(isUrl).length / (bv.length || 1);
     if (bnr > 0.5 && isNumericLike(fv)) fs++;
     if (bur > 0.5 && isUrl(fv)) fs++;
-    if (bnr > 0.5) bs++;
-    if (bur > 0.5) bs++;
+    if (bnr > 0.5 && !isNumericLike(fv)) bs++;
+    if (bur > 0.5 && !isUrl(fv)) bs++;
   }
   return bs > 0 && fs / bs > 0.5 ? "data" : "header";
 }
@@ -459,20 +459,6 @@ function ColumnMapperModal({ spreadsheetHeaders, notionSchema, onConfirm, onClos
           <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#6b7280", cursor: "pointer", fontSize: "1.2rem" }}>✕</button>
         </div>
 
-        {/* Double-check banner */}
-        <div style={{ background: "#1a1000", border: "1px solid #f59e0b44", borderRadius: "9px", padding: "9px 13px", marginBottom: "14px", display: "flex", alignItems: "flex-start", gap: "8px" }}>
-          <span style={{ fontSize: "0.9rem", flexShrink: 0 }}>⚠️</span>
-          <div style={{ fontSize: "0.62rem", color: "#fcd34d", lineHeight: 1.7 }}>
-            <strong style={{ color: "#f59e0b", fontFamily: "'Syne',sans-serif", letterSpacing: "1px" }}>DOUBLE-CHECK YOUR COLUMN MAPPING</strong>
-            <br />
-            Auto-mapping matched columns by name — please verify each one before pushing. URL columns in particular should be mapped to a <strong>url</strong> Notion property, not <em>rich_text</em>.
-          </div>
-        </div>
-
-        <div style={{ color: "#6b7280", fontSize: "0.62rem", marginBottom: "18px" }}>
-          Match each spreadsheet column to a Notion database property. Unmapped columns are skipped.
-        </div>
-
         <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "7px" }}>
           {spreadsheetHeaders.map((h) => {
             const currentVal = mapping[h] || "";
@@ -581,6 +567,28 @@ function PushProgressModal({ total, pushed, failed, onClose, done }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// AUTO-MAP: matches spreadsheet headers to Notion properties by name
+// ─────────────────────────────────────────────────────────────────────────────
+function buildAutoMap(headers, notionSchema) {
+  const mapping = {};
+  headers.forEach((h) => {
+    const lower = h.toLowerCase().trim();
+    const exact = Object.keys(notionSchema).find((k) => k.toLowerCase() === lower);
+    if (exact) { mapping[h] = exact; return; }
+    const looksLikeUrl = /url|link|href|website|site/i.test(lower);
+    if (looksLikeUrl) {
+      const urlProp = Object.keys(notionSchema).find((k) => notionSchema[k].type === "url");
+      if (urlProp) { mapping[h] = urlProp; return; }
+    }
+    const partial = Object.keys(notionSchema).find(
+      (k) => k.toLowerCase().includes(lower) || lower.includes(k.toLowerCase())
+    );
+    if (partial) mapping[h] = partial;
+  });
+  return mapping;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN APP
 // ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -605,7 +613,6 @@ export default function App() {
   const [showDbPicker, setShowDbPicker]     = useState(false);
   const [targetDb, setTargetDb]             = useState({ id: "31a9b1412417803abaf5e164229a0d54", title: "Orders" });
   const [notionSchema, setNotionSchema]     = useState(null);
-  const [showMapper, setShowMapper]         = useState(false);
   const [columnMapping, setColumnMapping]   = useState(null);
 
   // Push progress
@@ -617,7 +624,6 @@ export default function App() {
   const [sortDir, setSortDir]   = useState("asc");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState(null);
-  const [activeTab, setActiveTab] = useState("merged");
 
   // ── Select Database ──
   const handleDbSelected = useCallback(async (db) => {
@@ -733,27 +739,10 @@ export default function App() {
     setLoading(false);
   }, [file1, sheetUrl, uploadTimestamp, orderer, projectTeam]);
 
-  // ── Open column mapper ──
-  const openMapper = useCallback(async () => {
-    if (!targetDb) { setShowDbPicker(true); return; }
-    let schema = notionSchema;
-    if (!schema) {
-      try {
-        schema = await fetchDatabaseSchema(targetDb.id);
-        setNotionSchema(schema);
-      } catch (e) {
-        setError("Could not load schema: " + e.message);
-        return;
-      }
-    }
-    setShowMapper(true);
-  }, [targetDb, notionSchema]);
-
   // ── Push rows to Notion ──
   const pushToNotion = useCallback(async (mapping) => {
-    setShowMapper(false);
     setColumnMapping(mapping);
-    if (!mergedData || !targetDb) return;
+    if (!mergedData || !targetDb || !notionSchema) return;
 
     const mappedEntries = Object.entries(mapping).filter(([, v]) => v);
     if (!mappedEntries.length) { setError("No columns mapped."); return; }
@@ -795,6 +784,24 @@ export default function App() {
     setPushing(false);
   }, [mergedData, targetDb, notionSchema]);
 
+  // ── Auto-map & push directly (no mapper modal) ──
+  const autoPushToNotion = useCallback(async () => {
+    if (!targetDb) { setShowDbPicker(true); return; }
+    let schema = notionSchema;
+    if (!schema) {
+      try {
+        schema = await fetchDatabaseSchema(targetDb.id);
+        setNotionSchema(schema);
+      } catch (e) {
+        setError("Could not load schema: " + e.message);
+        return;
+      }
+    }
+    const headersToMap = headers.filter((h) => h !== "Spreadsheet Link");
+    const mapping = buildAutoMap(headersToMap, schema);
+    await pushToNotion(mapping);
+  }, [targetDb, notionSchema, headers, pushToNotion]);
+
   // ── Sort ──
   const handleSort = (col) => {
     if (sortCol === col) setSortDir((d) => d === "asc" ? "desc" : "asc");
@@ -815,7 +822,11 @@ export default function App() {
   const totalRevenue = mergedData && floatCols[0] ? mergedData.reduce((s, r) => s + (parseFloat(r[floatCols[0]]) || 0), 0) : null;
   const totalQty     = mergedData && intCols[0] ? mergedData.reduce((s, r) => s + (parseInt(r[intCols[0]]) || 0), 0) : null;
 
-  const notionReady = !!targetDb;
+  const notionReady = !!targetDb && !!notionSchema;
+
+  // Hidden meta columns — submitted to Notion but not shown in the preview table
+  const META_COLS = ["Orderer", "Project Team", "Timestamp", "Spreadsheet Link"];
+  const displayHeaders = headers.filter((h) => !META_COLS.includes(h));
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -840,14 +851,6 @@ export default function App() {
 
       {/* Modals */}
       {showDbPicker && <DatabasePickerModal onSelect={handleDbSelected} onClose={() => setShowDbPicker(false)} />}
-      {showMapper && notionSchema && mergedData && (
-        <ColumnMapperModal
-          spreadsheetHeaders={headers.filter(h => h !== "Spreadsheet Link")}
-          notionSchema={notionSchema}
-          onConfirm={pushToNotion}
-          onClose={() => setShowMapper(false)}
-        />
-      )}
       {pushProgress && (
         <PushProgressModal
           {...pushProgress}
@@ -905,7 +908,7 @@ export default function App() {
                     <span>Connected · <button onClick={() => setShowDbPicker(true)} style={{ background: "none", border: "none", color: "#4B9CD3", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", padding: 0, textDecoration: "underline" }}>Select a database ↗</button></span>
                   )}
                   {notionReady && (
-                    <>Pushing to <strong style={{ color: "#7EC8E3" }}>"{targetDb.title}"</strong> · {columnMapping ? `${Object.values(columnMapping).filter(Boolean).length} columns mapped` : "Map columns before pushing"}</>
+                    <>Pushing to <strong style={{ color: "#7EC8E3" }}>"{targetDb.title}"</strong></>
                   )}
                 </div>
               </div>
@@ -914,11 +917,11 @@ export default function App() {
               {targetDb && (
                 <button onClick={() => setShowDbPicker(true)}
                   style={{ background: "transparent", border: "1px solid #4B9CD340", color: "#4B9CD3", borderRadius: "7px", padding: "6px 12px", fontSize: "0.6rem", cursor: "pointer", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
-                  {targetDb ? "CHANGE DB" : "PICK DB"}
+                  CHANGE DB
                 </button>
               )}
               {notionReady && mergedData && (
-                <button onClick={openMapper} disabled={pushing}
+                <button onClick={autoPushToNotion} disabled={pushing}
                   style={{ background: pushing ? "#1f2937" : "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: pushing ? "#4b5563" : "#fff", border: "none", borderRadius: "7px", padding: "6px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.63rem", cursor: pushing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
                   {pushing ? <><span className="spin">↻</span> PUSHING…</> : "↑ PUSH TO NOTION"}
                 </button>
@@ -930,14 +933,6 @@ export default function App() {
         {/* ── UPLOAD ── */}
         <div style={{ background: "#080d1a", border: "1px solid #0d1220", borderRadius: "16px", padding: "16px", marginBottom: "14px" }}>
           <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.55rem", letterSpacing: "4px", color: "#374151", marginBottom: "10px" }}>UPLOAD YOUR FILE OR GOOGLE SHEET</div>
-
-          {/* Column mapping reminder */}
-          <div style={{ background: "#0d1008", border: "1px solid #4ade8040", borderRadius: "9px", padding: "9px 13px", marginBottom: "13px", display: "flex", alignItems: "center", gap: "9px" }}>
-            <span style={{ fontSize: "0.85rem", flexShrink: 0 }}>💡</span>
-            <div style={{ fontSize: "0.61rem", color: "#86efac", lineHeight: 1.7 }}>
-              After processing your file or Google Sheet, <strong style={{ color: "#4ade80" }}>verify that all columns are mapped correctly</strong> before pushing to Notion — especially URL, number, and date fields, which may need manual adjustment.
-            </div>
-          </div>
 
           {/* Single drop zone */}
           <div style={{ marginBottom: "12px" }}>
@@ -1005,8 +1000,7 @@ export default function App() {
               style={{ background: loading ? "#111827" : "linear-gradient(135deg,#4B9CD3,#7EC8E3)", color: loading ? "#4b5563" : "#fff", border: "none", borderRadius: "9px", padding: "8px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.7rem", letterSpacing: "1.5px", cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
               {loading ? <><span className="spin">↻</span> PARSING…</> : "⬡ PROCESS"}
             </button>
-            {notionReady && mergedData && !columnMapping && <span style={{ color: "#4B9CD3", fontSize: "0.58rem" }}>↑ Push to Notion to map columns</span>}
-            {columnMapping && <span style={{ color: "#34d399", fontSize: "0.58rem" }}>✓ Mapping saved — push again to re-upload</span>}
+            {notionReady && mergedData && <span style={{ color: "#34d399", fontSize: "0.58rem" }}>✓ Ready — click Push to send to Notion</span>}
           </div>
         </div>
 
@@ -1065,18 +1059,16 @@ export default function App() {
 
             {/* Tabs */}
             <div style={{ borderBottom: "1px solid #0d1220", marginBottom: "11px" }}>
-              <button className={`tab ${activeTab === "merged" ? "on" : ""}`} onClick={() => setActiveTab("merged")}>MERGED TABLE</button>
-              <button className={`tab ${activeTab === "notion" ? "on" : ""}`} onClick={() => setActiveTab("notion")}>NOTION MAPPING</button>
+              <button className={`tab on`}>MERGED TABLE</button>
             </div>
 
             {/* Table */}
-            {activeTab === "merged" && (
-              <>
+            <>
                 <div style={{ overflowX: "auto", borderRadius: "11px", border: "1px solid #0d1220" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.71rem" }}>
                     <thead>
                       <tr style={{ background: "#06090f" }}>
-                        {headers.map((h) => {
+                        {displayHeaders.map((h) => {
                           const meta = COL_TYPE_META[colTypes[h]] || COL_TYPE_META.unknown;
                           return (
                             <th key={h} className="th-sort" onClick={() => handleSort(h)}
@@ -1094,7 +1086,7 @@ export default function App() {
                     <tbody>
                       {displayRows.slice(0, 500).map((row, i) => (
                         <tr key={i} className="data-row row-anim">
-                          {headers.map((h) => (
+                          {displayHeaders.map((h) => (
                             <td key={h} style={{ padding: "7px 11px", borderBottom: "1px solid #06090f", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis" }}>
                               <Cell value={row[h]} type={colTypes[h]} />
                             </td>
@@ -1110,7 +1102,7 @@ export default function App() {
                 <div style={{ marginTop: "11px", display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                   <span style={{ color: "#1f2937", fontSize: "0.56rem" }}>{mergedData.length} rows</span>
                   {notionReady && (
-                    <button onClick={openMapper} disabled={pushing}
+                    <button onClick={autoPushToNotion} disabled={pushing}
                       style={{ background: pushing ? "#1f2937" : "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: pushing ? "#4b5563" : "#fff", border: "none", borderRadius: "8px", padding: "7px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.65rem", cursor: pushing ? "not-allowed" : "pointer" }}>
                       ↑ PUSH TO NOTION
                     </button>
@@ -1122,60 +1114,7 @@ export default function App() {
                     </button>
                   )}
                 </div>
-              </>
-            )}
-
-            {/* Notion mapping tab */}
-            {activeTab === "notion" && (
-              <div>
-                {!targetDb && (
-                  <div style={{ textAlign: "center", padding: "40px", color: "#374151" }}>
-                    <div style={{ fontFamily: "'Syne',sans-serif", fontSize: "0.6rem", letterSpacing: "3px", marginBottom: "14px" }}>SELECT A DATABASE</div>
-                    <button onClick={() => setShowDbPicker(true)} style={{ background: "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: "pointer" }}>
-                      PICK DATABASE
-                    </button>
-                  </div>
-                )}
-                {notionReady && !columnMapping && (
-                  <div style={{ textAlign: "center", padding: "40px", color: "#374151" }}>
-                    <div style={{ fontFamily: "'Syne',sans-serif", fontSize: "0.6rem", letterSpacing: "3px", marginBottom: "14px" }}>NO MAPPING YET</div>
-                    <button onClick={openMapper} style={{ background: "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: "pointer" }}>
-                      MAP COLUMNS NOW
-                    </button>
-                  </div>
-                )}
-                {notionReady && columnMapping && notionSchema && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
-                    <div style={{ color: "#374151", fontSize: "0.58rem", marginBottom: "4px" }}>Current column → Notion property mapping:</div>
-                    {headers.map((h) => {
-                      const notionProp = columnMapping[h];
-                      const propType = notionProp && notionSchema[notionProp]?.type;
-                      const meta = propType ? NOTION_PROP_META[propType] : null;
-                      return (
-                        <div key={h} style={{ display: "flex", alignItems: "center", gap: "10px", background: notionProp ? "#001B44" : "#06090f", border: `1px solid ${notionProp ? "#4B9CD330" : "#1f2937"}`, borderRadius: "9px", padding: "9px 12px" }}>
-                          <span style={{ color: "#d1d5db", fontSize: "0.72rem", fontFamily: "monospace", flex: "0 0 180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h}</span>
-                          <span style={{ color: "#374151" }}>→</span>
-                          {notionProp ? (
-                            <span style={{ color: meta?.color || "#4B9CD3", fontSize: "0.68rem", fontFamily: "monospace" }}>{meta?.icon} {notionProp} <span style={{ color: "#374151" }}>({propType})</span></span>
-                          ) : (
-                            <span style={{ color: "#374151", fontSize: "0.65rem" }}>skipped</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                    <div style={{ marginTop: "10px", display: "flex", gap: "8px" }}>
-                      <button onClick={openMapper} style={{ background: "transparent", border: "1px solid #4B9CD340", color: "#4B9CD3", borderRadius: "8px", padding: "7px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.63rem", cursor: "pointer" }}>
-                        ✎ EDIT MAPPING
-                      </button>
-                      <button onClick={() => pushToNotion(columnMapping)} disabled={pushing}
-                        style={{ background: "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: "#fff", border: "none", borderRadius: "8px", padding: "7px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.63rem", cursor: "pointer" }}>
-                        ↑ RE-PUSH ALL ROWS
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            </>
           </>
         )}
 
@@ -1188,8 +1127,7 @@ export default function App() {
               <div>① <span style={{ color: "#4B9CD3" }}>Drop a file (.xlsx / .xls / .csv)</span> or paste a Google Sheet link</div>
               <div>② <span style={{ color: "#7EC8E3" }}>Enter orderer + project team</span> → saved with every row</div>
               <div>③ <span style={{ color: "#34d399" }}>Process</span> → timestamp auto-captured</div>
-              <div>④ <span style={{ color: "#818cf8" }}>Map columns</span> → match to Notion properties</div>
-              <div>⑤ <span style={{ color: "#f472b6" }}>Push</span> → rows become pages in Notion</div>
+              <div>④ <span style={{ color: "#f472b6" }}>Push</span> → rows become pages in Notion</div>
             </div>
           </div>
         )}
