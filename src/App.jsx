@@ -758,8 +758,10 @@ export default function App() {
     setPushProgress({ total: mergedData.length, pushed: 0, failed: 0 });
 
     let pushed = 0, failed = 0;
+    const BATCH_SIZE = 5;
 
-    for (const row of mergedData) {
+    // Build all property objects upfront
+    const allProperties = mergedData.map((row) => {
       const properties = {};
       for (const [spreadsheetCol, notionProp] of mappedEntries) {
         const propSchema = notionSchema[notionProp];
@@ -767,8 +769,6 @@ export default function App() {
         const built = buildNotionProperty(row[spreadsheetCol], propSchema.type);
         if (built) properties[notionProp] = built;
       }
-
-      // Always push Spreadsheet Link directly — never relies on user mapping
       const slValue = row["Spreadsheet Link"];
       if (slValue) {
         const slPropName =
@@ -779,12 +779,16 @@ export default function App() {
           if (built) properties[slPropName] = built;
         }
       }
-      try {
-        await createNotionPage(targetDb.id, properties);
-        pushed++;
-      } catch {
-        failed++;
-      }
+      return properties;
+    });
+
+    // Push in parallel batches of BATCH_SIZE
+    for (let i = 0; i < allProperties.length; i += BATCH_SIZE) {
+      const batch = allProperties.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map((properties) => createNotionPage(targetDb.id, properties))
+      );
+      results.forEach((r) => { if (r.status === "fulfilled") pushed++; else failed++; });
       setPushProgress({ total: mergedData.length, pushed, failed });
     }
 
