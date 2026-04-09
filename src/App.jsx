@@ -1,11 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// NOTION PROXY HELPER
-// All Notion API calls go through /.netlify/functions/notion
-// to avoid CORS errors in the browser.
-// ─────────────────────────────────────────────────────────────────────────────
 async function notionRequest({ path, method = "GET", body }) {
   const res = await fetch("/api/notion", {
     method: "POST",
@@ -17,7 +12,6 @@ async function notionRequest({ path, method = "GET", body }) {
   return data;
 }
 
-// Fetch all databases the integration has access to
 async function fetchNotionDatabases() {
   const data = await notionRequest({
     path: "/search",
@@ -27,13 +21,11 @@ async function fetchNotionDatabases() {
   return data.results || [];
 }
 
-// Fetch properties schema for a specific database
 async function fetchDatabaseSchema(databaseId) {
   const data = await notionRequest({ path: `/databases/${databaseId}` });
   return data.properties || {};
 }
 
-// Push a single row as a new Notion page in the database
 async function createNotionPage(databaseId, properties) {
   return notionRequest({
     path: "/pages",
@@ -42,65 +34,39 @@ async function createNotionPage(databaseId, properties) {
   });
 }
 
-// Build a Notion property value object from a raw cell value + Notion property type
 function buildNotionProperty(value, propType) {
   const s = String(value ?? "").trim();
   if (!s) return null;
-
   switch (propType) {
-    case "title":
-      return { title: [{ text: { content: s } }] };
-    case "rich_text":
-      return { rich_text: [{ text: { content: s } }] };
+    case "title":      return { title: [{ text: { content: s } }] };
+    case "rich_text":  return { rich_text: [{ text: { content: s } }] };
     case "number": {
       const n = parseFloat(s.replace(/[^0-9.-]/g, ""));
       return isNaN(n) ? null : { number: n };
     }
-    case "url":
-      return /^https?:\/\//i.test(s) ? { url: s } : { url: `https://${s}` };
-    case "email":
-      return { email: s };
-    case "phone_number":
-      return { phone_number: s };
-    case "checkbox":
-      return { checkbox: s.toLowerCase() === "true" || s === "1" };
-    case "select":
-      return { select: { name: s } };
-    case "multi_select":
-      return { multi_select: s.split(",").map((v) => ({ name: v.trim() })) };
-    case "date":
-      return { date: { start: s } };
-    default:
-      return { rich_text: [{ text: { content: s } }] };
+    case "url":          return /^https?:\/\//i.test(s) ? { url: s } : { url: `https://${s}` };
+    case "email":        return { email: s };
+    case "phone_number": return { phone_number: s };
+    case "checkbox":     return { checkbox: s.toLowerCase() === "true" || s === "1" };
+    case "select":       return { select: { name: s } };
+    case "multi_select": return { multi_select: s.split(",").map((v) => ({ name: v.trim() })) };
+    case "date":         return { date: { start: s } };
+    default:             return { rich_text: [{ text: { content: s } }] };
   }
 }
 
-// Format header names: URL stays all-caps, everything else gets first letter capitalized
 function formatHeader(h) {
   if (h.toLowerCase() === "url") return "URL";
   return h.charAt(0).toUpperCase() + h.slice(1);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TYPE DETECTION (same as before — used for display only)
-// ─────────────────────────────────────────────────────────────────────────────
 const isUrl = (v) => {
   if (typeof v !== "string") return false;
   const s = v.trim();
-  return (
-    /^https?:\/\//i.test(s) ||
-    /^www\./i.test(s) ||
-    /^[a-z0-9-]+\.[a-z]{2,}(\/|$)/i.test(s)
-  );
+  return /^https?:\/\//i.test(s) || /^www\./i.test(s) || /^[a-z0-9-]+\.[a-z]{2,}(\/|$)/i.test(s);
 };
-const isInteger = (v) => {
-  const n = Number(v);
-  return v !== "" && v != null && !isNaN(n) && Number.isInteger(n);
-};
-const isFloat = (v) => {
-  const n = Number(v);
-  return v !== "" && v != null && !isNaN(n) && !Number.isInteger(n);
-};
+const isInteger = (v) => { const n = Number(v); return v !== "" && v != null && !isNaN(n) && Number.isInteger(n); };
+const isFloat   = (v) => { const n = Number(v); return v !== "" && v != null && !isNaN(n) && !Number.isInteger(n); };
 const isNumericLike = (v) => isInteger(v) || isFloat(v);
 
 const HEADER_KEYWORDS = {
@@ -152,46 +118,27 @@ function detectFirstRowRole(rows) {
   return bs > 0 && fs / bs > 0.5 ? "data" : "header";
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// VISUAL METADATA
-// ─────────────────────────────────────────────────────────────────────────────
-const COL_TYPE_META = {
-  integer: { label: "Quantity",    color: "#818cf8", icon: "#",  badge: "#1e1b4b", badgeFg: "#a5b4fc" },
-  float:   { label: "Price",       color: "#34d399", icon: "$",  badge: "#052e16", badgeFg: "#6ee7b7" },
-  url:     { label: "Link",        color: "#7EC8E3", icon: "↗",  badge: "#451a03", badgeFg: "#fcd34d" },
-  text:    { label: "Text",        color: "#f472b6", icon: "T",  badge: "#4a044e", badgeFg: "#f0abfc" },
-  unknown: { label: "Other",       color: "#6b7280", icon: "?",  badge: "#1f2937", badgeFg: "#9ca3af" },
-};
-
-// Notion property type display info
 const NOTION_PROP_META = {
-  title:        { color: "#f472b6", icon: "★" },
-  rich_text:    { color: "#e2e8f0", icon: "T" },
-  number:       { color: "#34d399", icon: "#" },
-  url:          { color: "#7EC8E3", icon: "↗" },
-  email:        { color: "#818cf8", icon: "@" },
-  phone_number: { color: "#c084fc", icon: "☎" },
-  checkbox:     { color: "#6ee7b7", icon: "✓" },
-  select:       { color: "#f59e0b", icon: "◉" },
-  multi_select: { color: "#fb923c", icon: "⊕" },
-  date:         { color: "#60a5fa", icon: "📅" },
-  formula:      { color: "#475569", icon: "ƒ" },
-  rollup:       { color: "#475569", icon: "⟳" },
-  relation:     { color: "#475569", icon: "↔" },
+  title:        { color: "#be185d", icon: "★" },
+  rich_text:    { color: "#374151", icon: "T" },
+  number:       { color: "#065f46", icon: "#" },
+  url:          { color: "#1e40af", icon: "↗" },
+  email:        { color: "#5b21b6", icon: "@" },
+  phone_number: { color: "#7c3aed", icon: "☎" },
+  checkbox:     { color: "#065f46", icon: "✓" },
+  select:       { color: "#92400e", icon: "◉" },
+  multi_select: { color: "#9a3412", icon: "⊕" },
+  date:         { color: "#1e3a8a", icon: "📅" },
+  formula:      { color: "#6b7280", icon: "ƒ" },
+  rollup:       { color: "#6b7280", icon: "⟳" },
+  relation:     { color: "#6b7280", icon: "↔" },
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FILE PARSER
-// CSV files are read as text to preserve URLs and special characters.
-// Excel files are read as ArrayBuffer via SheetJS.
-// ─────────────────────────────────────────────────────────────────────────────
 function parseCsvText(text) {
-  // Robust CSV parser: handles quoted fields, embedded commas, newlines
   const rows = [];
   let row = [], field = "", inQuote = false;
   for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const next = text[i + 1];
+    const ch = text[i], next = text[i + 1];
     if (inQuote) {
       if (ch === '"' && next === '"') { field += '"'; i++; }
       else if (ch === '"') { inQuote = false; }
@@ -216,7 +163,6 @@ function parseFile(file) {
       try {
         let raw;
         if (isCsv) {
-          // Read CSV as text to preserve URLs exactly
           raw = parseCsvText(e.target.result);
         } else {
           const uint8 = new Uint8Array(e.target.result);
@@ -225,10 +171,7 @@ function parseFile(file) {
           raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
         }
         const cleaned = raw.filter((r) => r.some((c) => String(c).trim() !== ""));
-        if (!cleaned.length) {
-          resolve({ name: file.name, headers: [], dataRows: [] });
-          return;
-        }
+        if (!cleaned.length) { resolve({ name: file.name, headers: [], dataRows: [] }); return; }
         const role = detectFirstRowRole(cleaned);
         let headers, dataRows;
         if (role === "header") {
@@ -239,21 +182,16 @@ function parseFile(file) {
           dataRows = cleaned;
         }
         resolve({ name: file.name, headers, dataRows });
-      } catch (err) {
-        reject(err);
-      }
+      } catch (err) { reject(err); }
     };
     reader.onerror = reject;
-    // CSV → text, Excel → ArrayBuffer
     if (isCsv) reader.readAsText(file);
     else reader.readAsArrayBuffer(file);
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// UI COMPONENTS
-// ─────────────────────────────────────────────────────────────────────────────
-function DropZone({ label, sublabel, icon, accept, onFile, file }) {
+// ── Drop Zone ──
+function DropZone({ label, sublabel, accept, onFile, file }) {
   const [drag, setDrag] = useState(false);
   const ref = useRef();
   return (
@@ -262,54 +200,53 @@ function DropZone({ label, sublabel, icon, accept, onFile, file }) {
       onDragLeave={() => setDrag(false)}
       onDrop={(e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) onFile(f); }}
       onClick={() => ref.current.click()}
-      style={{ border: `2px dashed ${drag ? "#4B9CD3" : file ? "#34d399" : "#1f2937"}`, borderRadius: "14px", padding: "20px 16px", cursor: "pointer", background: drag ? "#001B44" : file ? "#031a0e" : "#0b0f1a", transition: "all 0.2s", textAlign: "center", flex: 1, minWidth: 0 }}
+      style={{
+        border: `2px dashed ${drag ? "#2563eb" : file ? "#16a34a" : "#d1d5db"}`,
+        borderRadius: "10px",
+        padding: "24px 16px",
+        cursor: "pointer",
+        background: drag ? "#eff6ff" : file ? "#f0fdf4" : "#fafafa",
+        transition: "all 0.15s",
+        textAlign: "center",
+      }}
     >
       <input ref={ref} type="file" accept={accept} style={{ display: "none" }} onChange={(e) => e.target.files[0] && onFile(e.target.files[0])} />
-      <div style={{ fontSize: "1.6rem", marginBottom: "5px" }}>{icon}</div>
-      <div style={{ color: file ? "#34d399" : "#9ca3af", fontSize: "0.73rem", fontFamily: "monospace", marginBottom: "2px" }}>
-        {file ? `✓ ${file.name}` : label}
+      <div style={{ fontSize: "1.4rem", marginBottom: "6px" }}>{file ? "✅" : "📄"}</div>
+      <div style={{ color: file ? "#15803d" : "#6b7280", fontSize: "0.82rem", fontWeight: 500 }}>
+        {file ? file.name : label}
       </div>
-      {sublabel && !file && <div style={{ color: "#374151", fontSize: "0.58rem" }}>{sublabel}</div>}
+      {sublabel && !file && <div style={{ color: "#9ca3af", fontSize: "0.72rem", marginTop: "3px" }}>{sublabel}</div>}
     </div>
   );
 }
 
+// ── Table cell ──
 function Cell({ value, type }) {
   const s = String(value ?? "").trim();
-  if (!s) return <span style={{ color: "#1f2937" }}>—</span>;
+  if (!s) return <span style={{ color: "#d1d5db" }}>—</span>;
   if (type === "url" || isUrl(s)) {
     const href = /^https?:\/\//i.test(s) ? s : `https://${s}`;
-    return <a href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#fcd34d", textDecoration: "none", borderBottom: "1px dashed #fcd34d44", fontSize: "0.7rem" }}>↗ {s.length > 28 ? s.slice(0, 28) + "…" : s}</a>;
+    return <a href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#2563eb", fontSize: "0.78rem" }}>↗ {s.length > 30 ? s.slice(0, 30) + "…" : s}</a>;
   }
-  if (type === "float") return <span style={{ color: "#6ee7b7", fontVariantNumeric: "tabular-nums" }}>${parseFloat(s).toFixed(2)}</span>;
-  if (type === "integer") return <span style={{ color: "#a5b4fc", fontVariantNumeric: "tabular-nums" }}>{parseInt(s).toLocaleString()}</span>;
-  return <span style={{ color: "#f9fafb" }}>{s}</span>;
+  if (type === "float")   return <span style={{ color: "#065f46" }}>${parseFloat(s).toFixed(2)}</span>;
+  if (type === "integer") return <span style={{ color: "#1e40af" }}>{parseInt(s).toLocaleString()}</span>;
+  return <span style={{ color: "#111827" }}>{s}</span>;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// NOTION TOKEN SETUP MODAL
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Notion Setup Modal ──
 function NotionSetupModal({ onSave, onClose }) {
   const [draft, setDraft] = useState(localStorage.getItem("notionToken") || "");
-
-  const save = () => {
-    const t = draft.trim();
-    if (!t) return;
-    localStorage.setItem("notionToken", t);
-    onSave(t);
-  };
-
+  const save = () => { const t = draft.trim(); if (!t) return; localStorage.setItem("notionToken", t); onSave(t); };
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#040810ee", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
-      <div style={{ background: "#0b0f1a", border: "1px solid #1f2937", borderRadius: "18px", padding: "28px", maxWidth: "540px", width: "100%" }}>
-        <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", color: "#7EC8E3", marginBottom: "6px" }}>Connect Notion</div>
-        <div style={{ color: "#6b7280", fontSize: "0.68rem", lineHeight: 2, marginBottom: "20px" }}>
-          You need a Notion Internal Integration token to push data to your database.<br />
-          <strong style={{ color: "#9ca3af" }}>Steps:</strong><br />
-          1. Go to <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener noreferrer" style={{ color: "#fb923c" }}>notion.so/my-integrations</a><br />
-          2. Click <strong style={{ color: "#d1d5db" }}>+ New integration</strong> → give it a name → Submit<br />
-          3. Copy the <strong style={{ color: "#d1d5db" }}>Internal Integration Token</strong> (starts with <code style={{ color: "#fcd34d", background: "#1f2937", padding: "1px 5px", borderRadius: "4px" }}>secret_</code>)<br />
-          4. Open your Notion database → click <strong style={{ color: "#d1d5db" }}>⋯ Menu → Add connections</strong> → select your integration<br />
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: "14px", padding: "28px", maxWidth: "520px", width: "100%", boxShadow: "0 4px 24px rgba(0,0,0,0.10)" }}>
+        <div style={{ fontWeight: 600, fontSize: "1rem", color: "#111827", marginBottom: "6px" }}>Connect Notion</div>
+        <div style={{ color: "#6b7280", fontSize: "0.78rem", lineHeight: 2, marginBottom: "20px" }}>
+          You need a Notion Internal Integration token.<br />
+          1. Go to <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>notion.so/my-integrations</a><br />
+          2. Click <strong>+ New integration</strong> → give it a name → Submit<br />
+          3. Copy the <strong>Internal Integration Token</strong> (starts with <code style={{ background: "#f3f4f6", padding: "1px 5px", borderRadius: "4px" }}>secret_</code>)<br />
+          4. In your Notion database → <strong>⋯ Menu → Add connections</strong> → select your integration<br />
           5. Paste the token below
         </div>
         <input
@@ -317,24 +254,18 @@ function NotionSetupModal({ onSave, onClose }) {
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && save()}
           placeholder="secret_xxxxxxxxxxxxxxxxxxxxxxxxx"
-          style={{ width: "100%", background: "#04060f", border: "1px solid #374151", borderRadius: "8px", padding: "10px 12px", color: "#f9fafb", fontSize: "0.73rem", fontFamily: "monospace", marginBottom: "14px", outline: "none", boxSizing: "border-box" }}
+          style={{ width: "100%", background: "#f9fafb", border: "1px solid #d1d5db", borderRadius: "8px", padding: "10px 12px", color: "#111827", fontSize: "0.82rem", fontFamily: "monospace", marginBottom: "14px", outline: "none", boxSizing: "border-box" }}
         />
         <div style={{ display: "flex", gap: "10px" }}>
-          <button onClick={save} style={{ background: "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.7rem", cursor: "pointer" }}>
-            SAVE & CONNECT
-          </button>
-          <button onClick={onClose} style={{ background: "transparent", border: "1px solid #374151", color: "#6b7280", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.7rem", cursor: "pointer" }}>
-            CANCEL
-          </button>
+          <button onClick={save} style={{ background: "#2563eb", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontWeight: 600, fontSize: "0.8rem", cursor: "pointer" }}>Save & connect</button>
+          <button onClick={onClose} style={{ background: "transparent", border: "1px solid #d1d5db", color: "#6b7280", borderRadius: "8px", padding: "9px 20px", fontWeight: 600, fontSize: "0.8rem", cursor: "pointer" }}>Cancel</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// NOTION DATABASE PICKER MODAL
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Database Picker Modal ──
 function DatabasePickerModal({ onSelect, onClose }) {
   const [databases, setDatabases] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -347,57 +278,45 @@ function DatabasePickerModal({ onSelect, onClose }) {
       .catch((e) => { setError(e.message); setLoading(false); });
   }, []);
 
-  const confirm = () => {
-    if (!selectedDb) return;
-    onSelect(selectedDb);
-  };
-
-  const getDbTitle = (db) => {
-    const t = db.title?.[0]?.plain_text;
-    return t || "Untitled Database";
-  };
+  const getDbTitle = (db) => db.title?.[0]?.plain_text || "Untitled Database";
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#040810ee", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
-      <div style={{ background: "#0b0f1a", border: "1px solid #1f2937", borderRadius: "20px", padding: "28px", maxWidth: "520px", width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
-          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", color: "#7EC8E3" }}>Select Notion Database</div>
-          <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#6b7280", cursor: "pointer", fontSize: "1.2rem" }}>✕</button>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: "14px", padding: "28px", maxWidth: "480px", width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column", boxShadow: "0 4px 24px rgba(0,0,0,0.10)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "18px" }}>
+          <div style={{ fontWeight: 600, fontSize: "1rem", color: "#111827" }}>Choose a Notion database</div>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: "1.2rem", lineHeight: 1 }}>✕</button>
         </div>
 
-        {loading && <div style={{ color: "#6b7280", fontSize: "0.68rem", textAlign: "center", padding: "30px" }}>Loading your databases…</div>}
-        {error && <div style={{ color: "#f87171", fontSize: "0.65rem", padding: "8px" }}>⚠ {error}<br /><span style={{ color: "#6b7280" }}>Make sure your integration has been added to at least one database.</span></div>}
+        {loading && <div style={{ color: "#6b7280", fontSize: "0.82rem", textAlign: "center", padding: "30px" }}>Loading databases…</div>}
+        {error && <div style={{ color: "#dc2626", fontSize: "0.75rem", padding: "8px", background: "#fef2f2", borderRadius: "8px" }}>⚠ {error}<br /><span style={{ color: "#6b7280" }}>Make sure your integration has been added to at least one database.</span></div>}
 
         {!loading && !error && (
           <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
             {databases.length === 0 && (
-              <div style={{ color: "#6b7280", fontSize: "0.68rem", textAlign: "center", padding: "20px", lineHeight: 1.8 }}>
-                No databases found.<br />
-                Make sure you've added your integration to a database via<br />
-                <strong style={{ color: "#9ca3af" }}>⋯ Menu → Add connections</strong> in Notion.
+              <div style={{ color: "#6b7280", fontSize: "0.78rem", textAlign: "center", padding: "20px", lineHeight: 1.8 }}>
+                No databases found.<br />Add your integration in Notion via <strong>⋯ Menu → Add connections</strong>.
               </div>
             )}
             {databases.map((db) => (
               <div key={db.id} onClick={() => setSelectedDb(db)}
-                style={{ padding: "12px 14px", borderRadius: "10px", cursor: "pointer", background: selectedDb?.id === db.id ? "#001B44" : "#06090f", border: `1px solid ${selectedDb?.id === db.id ? "#4B9CD3" : "#1f2937"}`, display: "flex", alignItems: "center", gap: "10px", transition: "all 0.15s" }}>
-                <span style={{ fontSize: "1.1rem" }}>🗄</span>
+                style={{ padding: "12px 14px", borderRadius: "10px", cursor: "pointer", background: selectedDb?.id === db.id ? "#eff6ff" : "#f9fafb", border: `1.5px solid ${selectedDb?.id === db.id ? "#2563eb" : "#e5e7eb"}`, display: "flex", alignItems: "center", gap: "10px", transition: "all 0.15s" }}>
+                <span style={{ fontSize: "1rem" }}>🗄</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: selectedDb?.id === db.id ? "#7EC8E3" : "#d1d5db", fontSize: "0.75rem", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {getDbTitle(db)}
-                  </div>
-                  <div style={{ color: "#374151", fontSize: "0.56rem", marginTop: "2px", fontFamily: "monospace" }}>{db.id}</div>
+                  <div style={{ color: selectedDb?.id === db.id ? "#1d4ed8" : "#111827", fontSize: "0.85rem", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{getDbTitle(db)}</div>
+                  <div style={{ color: "#9ca3af", fontSize: "0.65rem", marginTop: "2px", fontFamily: "monospace" }}>{db.id}</div>
                 </div>
-                {selectedDb?.id === db.id && <span style={{ color: "#4B9CD3", fontSize: "0.8rem" }}>✓</span>}
+                {selectedDb?.id === db.id && <span style={{ color: "#2563eb" }}>✓</span>}
               </div>
             ))}
           </div>
         )}
 
-        <div style={{ marginTop: "20px", display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-          <button onClick={onClose} style={{ background: "transparent", border: "1px solid #374151", color: "#6b7280", borderRadius: "8px", padding: "9px 18px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: "pointer" }}>CANCEL</button>
-          <button onClick={confirm} disabled={!selectedDb}
-            style={{ background: !selectedDb ? "#1f2937" : "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: !selectedDb ? "#4b5563" : "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: !selectedDb ? "not-allowed" : "pointer" }}>
-            ✓ USE THIS DATABASE
+        <div style={{ marginTop: "18px", display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ background: "transparent", border: "1px solid #d1d5db", color: "#6b7280", borderRadius: "8px", padding: "8px 16px", fontWeight: 600, fontSize: "0.78rem", cursor: "pointer" }}>Cancel</button>
+          <button onClick={() => selectedDb && onSelect(selectedDb)} disabled={!selectedDb}
+            style={{ background: !selectedDb ? "#e5e7eb" : "#2563eb", color: !selectedDb ? "#9ca3af" : "#fff", border: "none", borderRadius: "8px", padding: "8px 18px", fontWeight: 600, fontSize: "0.78rem", cursor: !selectedDb ? "not-allowed" : "pointer" }}>
+            Use this database
           </button>
         </div>
       </div>
@@ -405,101 +324,70 @@ function DatabasePickerModal({ onSelect, onClose }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// COLUMN MAPPER MODAL
-// Maps spreadsheet columns → Notion database properties
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Column Mapper Modal ──
 function ColumnMapperModal({ spreadsheetHeaders, notionSchema, onConfirm, onClose }) {
-  // Auto-suggest: try to match spreadsheet col names to notion property names
   const autoMap = () => {
     const mapping = {};
     spreadsheetHeaders.forEach((h) => {
       const lower = h.toLowerCase().trim();
-      // Exact match first
       const exact = Object.keys(notionSchema).find((k) => k.toLowerCase() === lower);
       if (exact) { mapping[h] = exact; return; }
-      // Timestamp column: always map to a Notion property named "Timestamp" (any case)
       if (lower === "timestamp") {
         const tsProp = Object.keys(notionSchema).find((k) => k.toLowerCase() === "timestamp");
         if (tsProp) { mapping[h] = tsProp; return; }
       }
-      // For URL-like column headers, prefer Notion properties of type "url"
       const looksLikeUrl = /url|link|href|website|site/i.test(lower);
       if (looksLikeUrl) {
         const urlProp = Object.keys(notionSchema).find((k) => notionSchema[k].type === "url");
         if (urlProp) { mapping[h] = urlProp; return; }
       }
-      // Partial match
-      const partial = Object.keys(notionSchema).find(
-        (k) => k.toLowerCase().includes(lower) || lower.includes(k.toLowerCase())
-      );
+      const partial = Object.keys(notionSchema).find((k) => k.toLowerCase().includes(lower) || lower.includes(k.toLowerCase()));
       if (partial) mapping[h] = partial;
     });
     return mapping;
   };
 
   const [mapping, setMapping] = useState(autoMap);
-
-  // Editable properties only (formula/rollup/relation are read-only in Notion)
-  const editableProps = Object.entries(notionSchema).filter(
-    ([, p]) => !["formula", "rollup", "relation", "created_time", "last_edited_time", "created_by", "last_edited_by"].includes(p.type)
-  );
-
-  const setMap = (header, notionProp) => {
-    setMapping((prev) => ({ ...prev, [header]: notionProp || undefined }));
-  };
-
+  const editableProps = Object.entries(notionSchema).filter(([, p]) => !["formula","rollup","relation","created_time","last_edited_time","created_by","last_edited_by"].includes(p.type));
+  const setMap = (header, notionProp) => setMapping((prev) => ({ ...prev, [header]: notionProp || undefined }));
   const mappedCount = Object.values(mapping).filter(Boolean).length;
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#040810ee", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
-      <div style={{ background: "#0b0f1a", border: "1px solid #1f2937", borderRadius: "20px", padding: "28px", maxWidth: "640px", width: "100%", maxHeight: "85vh", display: "flex", flexDirection: "column" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: "14px", padding: "28px", maxWidth: "620px", width: "100%", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 4px 24px rgba(0,0,0,0.10)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", color: "#7EC8E3" }}>Map Columns → Notion</div>
-          <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#6b7280", cursor: "pointer", fontSize: "1.2rem" }}>✕</button>
+          <div style={{ fontWeight: 600, fontSize: "1rem", color: "#111827" }}>Map columns to Notion</div>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: "1.2rem", lineHeight: 1 }}>✕</button>
         </div>
+        <p style={{ color: "#6b7280", fontSize: "0.78rem", margin: "0 0 16px" }}>Match each spreadsheet column to the right Notion property. Skip any you don't need.</p>
 
-        <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "7px" }}>
+        <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
           {spreadsheetHeaders.map((h) => {
             const currentVal = mapping[h] || "";
             const notionProp = notionSchema[currentVal];
             const meta = NOTION_PROP_META[notionProp?.type] || { color: "#6b7280", icon: "?" };
             return (
-              <div key={h} style={{ display: "flex", alignItems: "center", gap: "10px", background: "#06090f", borderRadius: "10px", padding: "10px 12px", border: `1px solid ${currentVal ? "#4B9CD320" : "#1f2937"}` }}>
-                {/* Spreadsheet column */}
-                <div style={{ flex: "0 0 180px", minWidth: 0 }}>
-                  <div style={{ color: "#f9fafb", fontSize: "0.72rem", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h}</div>
-                  <div style={{ color: "#374151", fontSize: "0.53rem", marginTop: "1px" }}>spreadsheet col</div>
+              <div key={h} style={{ display: "flex", alignItems: "center", gap: "10px", background: "#f9fafb", borderRadius: "8px", padding: "10px 12px", border: `1px solid ${currentVal ? "#bfdbfe" : "#e5e7eb"}` }}>
+                <div style={{ flex: "0 0 160px", minWidth: 0 }}>
+                  <div style={{ color: "#111827", fontSize: "0.82rem", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h}</div>
+                  <div style={{ color: "#9ca3af", fontSize: "0.65rem" }}>spreadsheet column</div>
                 </div>
-
-                <div style={{ color: "#374151", fontSize: "0.8rem" }}>→</div>
-
-                {/* Notion property selector */}
+                <div style={{ color: "#9ca3af" }}>→</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <select
-                    value={currentVal}
-                    onChange={(e) => setMap(h, e.target.value)}
-                    style={{ width: "100%", background: "#04060f", border: `1px solid ${currentVal ? "#4B9CD3" : "#374151"}`, borderRadius: "7px", padding: "6px 10px", color: currentVal ? "#7EC8E3" : "#6b7280", fontSize: "0.68rem", fontFamily: "monospace", outline: "none", cursor: "pointer" }}
-                  >
+                  <select value={currentVal} onChange={(e) => setMap(h, e.target.value)}
+                    style={{ width: "100%", background: "#fff", border: `1px solid ${currentVal ? "#2563eb" : "#d1d5db"}`, borderRadius: "7px", padding: "6px 10px", color: currentVal ? "#1d4ed8" : "#6b7280", fontSize: "0.78rem", outline: "none", cursor: "pointer" }}>
                     <option value="">— skip this column —</option>
                     {editableProps.map(([name, prop]) => {
                       const m = NOTION_PROP_META[prop.type] || { icon: "?" };
-                      return (
-                        <option key={name} value={name}>
-                          {m.icon} {name} ({prop.type})
-                        </option>
-                      );
+                      return <option key={name} value={name}>{m.icon} {name} ({prop.type})</option>;
                     })}
                   </select>
-                  {/* Warn if a URL-like column is mapped to rich_text */}
                   {currentVal && notionProp?.type === "rich_text" && /url|link|href|website/i.test(h) && (
-                    <div style={{ color: "#f59e0b", fontSize: "0.52rem", marginTop: "3px" }}>⚠ This looks like a URL column — consider mapping to a <strong>url</strong> property</div>
+                    <div style={{ color: "#d97706", fontSize: "0.65rem", marginTop: "3px" }}>⚠ Looks like a URL — consider mapping to a url property instead</div>
                   )}
                 </div>
-
-                {/* Type badge */}
                 {notionProp && (
-                  <div style={{ flexShrink: 0, background: meta.color + "18", border: `1px solid ${meta.color}30`, borderRadius: "6px", padding: "3px 7px", fontSize: "0.56rem", color: meta.color, fontFamily: "'Syne',sans-serif", fontWeight: 700, whiteSpace: "nowrap" }}>
+                  <div style={{ flexShrink: 0, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "6px", padding: "3px 8px", fontSize: "0.65rem", color: meta.color, fontWeight: 600, whiteSpace: "nowrap" }}>
                     {meta.icon} {notionProp.type}
                   </div>
                 )}
@@ -508,13 +396,13 @@ function ColumnMapperModal({ spreadsheetHeaders, notionSchema, onConfirm, onClos
           })}
         </div>
 
-        <div style={{ marginTop: "18px", paddingTop: "14px", borderTop: "1px solid #1f2937", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ color: "#6b7280", fontSize: "0.62rem" }}>{mappedCount} of {spreadsheetHeaders.length} columns mapped</span>
+        <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ color: "#6b7280", fontSize: "0.75rem" }}>{mappedCount} of {spreadsheetHeaders.length} columns mapped</span>
           <div style={{ display: "flex", gap: "10px" }}>
-            <button onClick={onClose} style={{ background: "transparent", border: "1px solid #374151", color: "#6b7280", borderRadius: "8px", padding: "9px 18px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: "pointer" }}>CANCEL</button>
+            <button onClick={onClose} style={{ background: "transparent", border: "1px solid #d1d5db", color: "#6b7280", borderRadius: "8px", padding: "8px 16px", fontWeight: 600, fontSize: "0.78rem", cursor: "pointer" }}>Cancel</button>
             <button onClick={() => onConfirm(mapping)} disabled={mappedCount === 0}
-              style={{ background: mappedCount === 0 ? "#1f2937" : "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: mappedCount === 0 ? "#4b5563" : "#fff", border: "none", borderRadius: "8px", padding: "9px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.68rem", cursor: mappedCount === 0 ? "not-allowed" : "pointer" }}>
-              ✓ CONFIRM MAPPING
+              style={{ background: mappedCount === 0 ? "#e5e7eb" : "#2563eb", color: mappedCount === 0 ? "#9ca3af" : "#fff", border: "none", borderRadius: "8px", padding: "8px 18px", fontWeight: 600, fontSize: "0.78rem", cursor: mappedCount === 0 ? "not-allowed" : "pointer" }}>
+              Confirm mapping
             </button>
           </div>
         </div>
@@ -523,52 +411,41 @@ function ColumnMapperModal({ spreadsheetHeaders, notionSchema, onConfirm, onClos
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PUSH PROGRESS MODAL
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Push Progress Modal ──
 function PushProgressModal({ total, pushed, failed, onClose, done }) {
   const pct = total > 0 ? Math.round((pushed + failed) / total * 100) : 0;
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#040810ee", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
-      <div style={{ background: "#0b0f1a", border: "1px solid #1f2937", borderRadius: "18px", padding: "32px", maxWidth: "400px", width: "100%", textAlign: "center" }}>
-        <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", color: done ? "#34d399" : "#7EC8E3", marginBottom: "8px" }}>
-          {done ? "✓ Upload Complete" : "Pushing to Notion…"}
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: "14px", padding: "32px", maxWidth: "380px", width: "100%", textAlign: "center", boxShadow: "0 4px 24px rgba(0,0,0,0.10)" }}>
+        <div style={{ fontWeight: 600, fontSize: "1rem", color: done ? "#16a34a" : "#111827", marginBottom: "8px" }}>
+          {done ? "Upload complete" : "Sending to Notion…"}
         </div>
-        <div style={{ color: "#6b7280", fontSize: "0.65rem", marginBottom: "20px" }}>
+        <div style={{ color: "#6b7280", fontSize: "0.78rem", marginBottom: "20px" }}>
           {pushed + failed} of {total} rows processed
         </div>
-
-        {/* Progress bar */}
-        <div style={{ background: "#0d1220", borderRadius: "4px", height: "6px", marginBottom: "16px", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${pct}%`, background: failed > 0 ? "linear-gradient(90deg,#4B9CD3,#ef4444)" : "linear-gradient(90deg,#4B9CD3,#7EC8E3)", borderRadius: "4px", transition: "width 0.3s ease" }} />
+        <div style={{ background: "#f3f4f6", borderRadius: "4px", height: "8px", marginBottom: "18px", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${pct}%`, background: failed > 0 ? "#ef4444" : "#2563eb", borderRadius: "4px", transition: "width 0.3s ease" }} />
         </div>
-
-        <div style={{ display: "flex", justifyContent: "center", gap: "20px", marginBottom: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: "24px", marginBottom: "20px" }}>
           <div>
-            <div style={{ color: "#34d399", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "1.2rem" }}>{pushed}</div>
-            <div style={{ color: "#374151", fontSize: "0.52rem", letterSpacing: "2px" }}>PUSHED</div>
+            <div style={{ color: "#16a34a", fontWeight: 700, fontSize: "1.4rem" }}>{pushed}</div>
+            <div style={{ color: "#9ca3af", fontSize: "0.65rem", letterSpacing: "1px" }}>sent</div>
           </div>
           {failed > 0 && (
             <div>
-              <div style={{ color: "#f87171", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "1.2rem" }}>{failed}</div>
-              <div style={{ color: "#374151", fontSize: "0.52rem", letterSpacing: "2px" }}>FAILED</div>
+              <div style={{ color: "#dc2626", fontWeight: 700, fontSize: "1.4rem" }}>{failed}</div>
+              <div style={{ color: "#9ca3af", fontSize: "0.65rem", letterSpacing: "1px" }}>failed</div>
             </div>
           )}
         </div>
-
         {done && (
-          <button onClick={onClose} style={{ background: "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 24px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.7rem", cursor: "pointer" }}>
-            DONE
-          </button>
+          <button onClick={onClose} style={{ background: "#2563eb", color: "#fff", border: "none", borderRadius: "8px", padding: "9px 24px", fontWeight: 600, fontSize: "0.8rem", cursor: "pointer" }}>Done</button>
         )}
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AUTO-MAP: matches spreadsheet headers to Notion properties by name
-// ─────────────────────────────────────────────────────────────────────────────
 function buildAutoMap(headers, notionSchema) {
   const mapping = {};
   headers.forEach((h) => {
@@ -580,59 +457,40 @@ function buildAutoMap(headers, notionSchema) {
       const urlProp = Object.keys(notionSchema).find((k) => notionSchema[k].type === "url");
       if (urlProp) { mapping[h] = urlProp; return; }
     }
-    const partial = Object.keys(notionSchema).find(
-      (k) => k.toLowerCase().includes(lower) || lower.includes(k.toLowerCase())
-    );
+    const partial = Object.keys(notionSchema).find((k) => k.toLowerCase().includes(lower) || lower.includes(k.toLowerCase()));
     if (partial) mapping[h] = partial;
   });
   return mapping;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN APP
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Main App ──
 export default function App() {
-  // Files — single drop zone only
   const [file1, setFile1] = useState(null);
   const [uploadTimestamp, setUploadTimestamp] = useState(null);
-
-  // Google Sheets
   const [sheetUrl, setSheetUrl] = useState("");
-
-  // Order metadata
   const [orderer, setOrderer] = useState("");
   const [projectTeam, setProjectTeam] = useState("");
-
-  // Parsed / merged data
   const [mergedData, setMergedData] = useState(null);
   const [headers, setHeaders] = useState([]);
   const [colTypes, setColTypes] = useState({});
   const [parseInfo, setParseInfo] = useState([]);
+  const [showDbPicker, setShowDbPicker] = useState(false);
+  const [targetDb, setTargetDb] = useState({ id: "31a9b1412417803abaf5e164229a0d54", title: "Orders" });
+  const [notionSchema, setNotionSchema] = useState(null);
+  const [columnMapping, setColumnMapping] = useState(null);
+  const [pushing, setPushing] = useState(false);
+  const [pushProgress, setPushProgress] = useState(null);
+  const [sortCol, setSortCol] = useState(null);
+  const [sortDir, setSortDir] = useState("asc");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  // Notion — database is hardcoded, no selection needed
-  const [showDbPicker, setShowDbPicker]     = useState(false);
-  const [targetDb, setTargetDb]             = useState({ id: "31a9b1412417803abaf5e164229a0d54", title: "Orders" });
-  const [notionSchema, setNotionSchema]     = useState(null);
-  const [columnMapping, setColumnMapping]   = useState(null);
-
-  // Auto-load schema on mount so users never have to select a database manually
   useEffect(() => {
     fetchDatabaseSchema("31a9b1412417803abaf5e164229a0d54")
       .then((schema) => setNotionSchema(schema))
       .catch((e) => setError("Could not load Notion schema: " + e.message));
   }, []);
 
-  // Push progress
-  const [pushing, setPushing]         = useState(false);
-  const [pushProgress, setPushProgress] = useState(null); // { total, pushed, failed }
-
-  // UI
-  const [sortCol, setSortCol]   = useState(null);
-  const [sortDir, setSortDir]   = useState("asc");
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState(null);
-
-  // ── Select Database ──
   const handleDbSelected = useCallback(async (db) => {
     const title = db.title?.[0]?.plain_text || "Untitled";
     setTargetDb({ id: db.id, title });
@@ -641,12 +499,9 @@ export default function App() {
     try {
       const schema = await fetchDatabaseSchema(db.id);
       setNotionSchema(schema);
-    } catch (e) {
-      setError("Could not load database schema: " + e.message);
-    }
+    } catch (e) { setError("Could not load database schema: " + e.message); }
   }, []);
 
-  // ── Convert Google Sheets URL → CSV export URL ──
   const toSheetCsvUrl = (url) => {
     const idMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
     if (!idMatch) return null;
@@ -656,27 +511,16 @@ export default function App() {
     return `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
   };
 
-  // ── Parse & Merge ──
   const merge = useCallback(async () => {
     const hasFile = !!file1;
     const hasUrl  = sheetUrl.trim().length > 0;
-
-    if (!hasFile && !hasUrl) {
-      setError("Upload a file or paste a Google Sheet link first.");
-      return;
-    }
-    if (hasUrl && !/spreadsheets\/d\//.test(sheetUrl)) {
-      setError("That doesn't look like a valid Google Sheets URL.");
-      return;
-    }
+    if (!hasFile && !hasUrl) { setError("Please upload a file or paste a Google Sheet link first."); return; }
+    if (hasUrl && !/spreadsheets\/d\//.test(sheetUrl)) { setError("That doesn't look like a valid Google Sheets URL."); return; }
 
     setLoading(true); setError(null); setColumnMapping(null);
     try {
-      let r1;
-      let sourceName;
-
+      let r1, sourceName;
       if (hasUrl) {
-        // Fetch Google Sheet as CSV
         const csvUrl = toSheetCsvUrl(sheetUrl.trim());
         if (!csvUrl) throw new Error("Could not parse Google Sheets URL.");
         const res = await fetch(csvUrl);
@@ -686,47 +530,35 @@ export default function App() {
         const cleaned = raw.filter((row) => row.some((c) => String(c).trim() !== ""));
         if (!cleaned.length) throw new Error("Sheet appears to be empty.");
         const role = detectFirstRowRole(cleaned);
-        let headers, dataRows;
+        let hdrs, dataRows;
         if (role === "header") {
-          headers = cleaned[0].map((h, i) => formatHeader(String(h ?? "").trim() || `Col ${i + 1}`));
+          hdrs = cleaned[0].map((h, i) => formatHeader(String(h ?? "").trim() || `Col ${i + 1}`));
           dataRows = cleaned.slice(1);
         } else {
-          headers = cleaned[0].map((_, i) => `Col ${i + 1}`);
+          hdrs = cleaned[0].map((_, i) => `Col ${i + 1}`);
           dataRows = cleaned;
         }
         sourceName = "Google Sheet";
-        r1 = { name: sourceName, headers, dataRows };
+        r1 = { name: sourceName, headers: hdrs, dataRows };
       } else {
-        // Parse uploaded file (xlsx, xls, csv)
         r1 = await parseFile(file1);
         sourceName = file1.name;
       }
 
-      // Include "Spreadsheet Link" column only when a Google Sheet URL was used
       const hasSheetLink = hasUrl && sheetUrl.trim();
-      const hdrs = [
-        ...r1.headers,
-        ...(hasSheetLink ? ["Spreadsheet Link"] : []),
-        "Timestamp", "Orderer", "Project Team",
-      ];
+      const hdrs = [...r1.headers, ...(hasSheetLink ? ["Spreadsheet Link"] : []), "Timestamp", "Orderer", "Project Team"];
       const ts = uploadTimestamp ? uploadTimestamp.toLocaleString() : new Date().toLocaleString();
+      const cleanSheetUrl = hasSheetLink ? sheetUrl.trim().split("/export")[0].replace(/\/(edit|pub|view).*$/, "") : "";
 
-      // Build a clean share URL (strip /export params so it opens the sheet nicely)
-      const cleanSheetUrl = hasSheetLink
-        ? sheetUrl.trim().split("/export")[0].replace(/\/(edit|pub|view).*$/, "")
-        : "";
-
-      const rows1 = r1.dataRows
-        .filter((row) => row.some((c) => c !== ""))
-        .map((row) => {
-          const obj = { _source: sourceName, _origin: "file1" };
-          r1.headers.forEach((h, i) => { obj[h] = row[i] ?? ""; });
-          if (hasSheetLink) obj["Spreadsheet Link"] = cleanSheetUrl;
-          obj["Timestamp"] = ts;
-          obj["Orderer"] = orderer;
-          obj["Project Team"] = projectTeam;
-          return obj;
-        });
+      const rows1 = r1.dataRows.filter((row) => row.some((c) => c !== "")).map((row) => {
+        const obj = { _source: sourceName, _origin: "file1" };
+        r1.headers.forEach((h, i) => { obj[h] = row[i] ?? ""; });
+        if (hasSheetLink) obj["Spreadsheet Link"] = cleanSheetUrl;
+        obj["Timestamp"] = ts;
+        obj["Orderer"] = orderer;
+        obj["Project Team"] = projectTeam;
+        return obj;
+      });
 
       const types = {};
       hdrs.forEach((h) => { types[h] = inferColType(h, rows1.map((r) => String(r[h] ?? "").trim())); });
@@ -740,25 +572,18 @@ export default function App() {
       setMergedData(rows1);
       setParseInfo([`Source: ${sourceName}`, `${r1.dataRows.length} rows`, `Processed: ${ts}`]);
       setSortCol(null);
-    } catch (e) {
-      setError("Parse error: " + e.message);
-    }
+    } catch (e) { setError("Error: " + e.message); }
     setLoading(false);
   }, [file1, sheetUrl, uploadTimestamp, orderer, projectTeam]);
 
-  // ── Push rows to Notion ──
   const pushToNotion = useCallback(async (mapping) => {
     setColumnMapping(mapping);
     if (!mergedData || !targetDb || !notionSchema) return;
-
     const mappedEntries = Object.entries(mapping).filter(([, v]) => v);
     if (!mappedEntries.length) { setError("No columns mapped."); return; }
-
     setPushing(true);
     setPushProgress({ total: mergedData.length, pushed: 0, failed: 0 });
-
     let pushed = 0, failed = 0;
-
     for (const row of mergedData) {
       const properties = {};
       for (const [spreadsheetCol, notionProp] of mappedEntries) {
@@ -769,45 +594,30 @@ export default function App() {
       }
       const slValue = row["Spreadsheet Link"];
       if (slValue) {
-        const slPropName =
-          notionSchema["Spreadsheet Link"] ? "Spreadsheet Link" :
-          Object.keys(notionSchema).find((k) => k.toLowerCase() === "spreadsheet link");
+        const slPropName = notionSchema["Spreadsheet Link"] ? "Spreadsheet Link" : Object.keys(notionSchema).find((k) => k.toLowerCase() === "spreadsheet link");
         if (slPropName && notionSchema[slPropName]) {
           const built = buildNotionProperty(slValue, notionSchema[slPropName].type || "url");
           if (built) properties[slPropName] = built;
         }
       }
-      try {
-        await createNotionPage(targetDb.id, properties);
-        pushed++;
-      } catch {
-        failed++;
-      }
+      try { await createNotionPage(targetDb.id, properties); pushed++; } catch { failed++; }
       setPushProgress({ total: mergedData.length, pushed, failed });
     }
-
     setPushing(false);
   }, [mergedData, targetDb, notionSchema]);
 
-  // ── Auto-map & push directly (no mapper modal) ──
   const autoPushToNotion = useCallback(async () => {
     if (!targetDb) { setShowDbPicker(true); return; }
     let schema = notionSchema;
     if (!schema) {
-      try {
-        schema = await fetchDatabaseSchema(targetDb.id);
-        setNotionSchema(schema);
-      } catch (e) {
-        setError("Could not load schema: " + e.message);
-        return;
-      }
+      try { schema = await fetchDatabaseSchema(targetDb.id); setNotionSchema(schema); }
+      catch (e) { setError("Could not load schema: " + e.message); return; }
     }
     const headersToMap = headers.filter((h) => h !== "Spreadsheet Link");
     const mapping = buildAutoMap(headersToMap, schema);
     await pushToNotion(mapping);
   }, [targetDb, notionSchema, headers, pushToNotion]);
 
-  // ── Sort ──
   const handleSort = (col) => {
     if (sortCol === col) setSortDir((d) => d === "asc" ? "desc" : "asc");
     else { setSortCol(col); setSortDir("asc"); }
@@ -821,239 +631,194 @@ export default function App() {
     return sortDir === "asc" ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
   }) : [];
 
-  // Stats
   const floatCols = headers.filter((h) => colTypes[h] === "float");
   const intCols   = headers.filter((h) => colTypes[h] === "integer");
   const totalRevenue = mergedData && floatCols[0] ? mergedData.reduce((s, r) => s + (parseFloat(r[floatCols[0]]) || 0), 0) : null;
   const totalQty     = mergedData && intCols[0] ? mergedData.reduce((s, r) => s + (parseInt(r[intCols[0]]) || 0), 0) : null;
 
   const notionReady = !!targetDb && !!notionSchema;
-
-  // Hidden meta columns — submitted to Notion but not shown in the preview table
   const META_COLS = ["Orderer", "Project Team", "Timestamp", "Spreadsheet Link"];
   const displayHeaders = headers.filter((h) => !META_COLS.includes(h));
 
-  // ─────────────────────────────────────────────────────────────────────────
+  const inputStyle = { width: "100%", background: "#fff", border: "1px solid #d1d5db", borderRadius: "8px", padding: "9px 12px", color: "#111827", fontSize: "0.85rem", outline: "none", boxSizing: "border-box" };
+  const labelStyle = { color: "#374151", fontSize: "0.75rem", fontWeight: 600, marginBottom: "5px", display: "block" };
+
   return (
-    <div style={{ minHeight: "100vh", background: "#040810", color: "#f9fafb", fontFamily: "'DM Mono','Courier New',monospace" }}>
+    <div style={{ minHeight: "100vh", background: "#f9fafb", color: "#111827", fontFamily: "system-ui, -apple-system, sans-serif" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@600;700;800&display=swap');
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 5px; height: 5px; }
-        ::-webkit-scrollbar-track { background: #0b0f1a; }
-        ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 3px; }
-        .th-sort:hover { background: #0d1220 !important; cursor: pointer; }
-        .data-row:hover td { background: #080d18 !important; }
-        .tab { background: none; border: none; cursor: pointer; padding: 10px 16px; font-family: 'Syne',sans-serif; font-size: 0.62rem; font-weight: 700; letter-spacing: 2px; color: #374151; border-bottom: 2px solid transparent; transition: all 0.2s; }
-        .tab.on { color: #fb923c; border-bottom-color: #4B9CD3; }
-        .tab:hover:not(.on) { color: #9ca3af; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .th-sort:hover { background: #f1f5f9 !important; cursor: pointer; }
+        .data-row:hover td { background: #f8fafc !important; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .spin { display: inline-block; animation: spin 1s linear infinite; }
-        @keyframes slide-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        .row-anim td { animation: slide-in 0.3s ease forwards; }
-        select option { background: #0b0f1a; }
       `}</style>
 
       {/* Modals */}
       {showDbPicker && <DatabasePickerModal onSelect={handleDbSelected} onClose={() => setShowDbPicker(false)} />}
-      {pushProgress && (
-        <PushProgressModal
-          {...pushProgress}
-          done={!pushing}
-          onClose={() => setPushProgress(null)}
-        />
-      )}
+      {pushProgress && <PushProgressModal {...pushProgress} done={!pushing} onClose={() => setPushProgress(null)} />}
 
-      {/* ── HEADER ── */}
-      <div style={{ background: "linear-gradient(135deg,#04060f,#140a00)", borderBottom: "1px solid #001B44", padding: "14px 26px" }}>
-        <div style={{ maxWidth: "1440px", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+      {/* Header */}
+      <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", padding: "14px 28px" }}>
+        <div style={{ maxWidth: "1200px", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{ width: "30px", height: "30px", background: "linear-gradient(135deg,#4B9CD3,#7EC8E3)", borderRadius: "7px", display: "grid", placeItems: "center", fontSize: "0.9rem" }}>⬡</div>
+            <div style={{ width: "34px", height: "34px", background: "#2563eb", borderRadius: "8px", display: "grid", placeItems: "center", color: "#fff", fontSize: "1rem", fontWeight: 700 }}>R</div>
             <div>
-              <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: "1rem", letterSpacing: "-0.3px", background: "linear-gradient(90deg,#7EC8E3,#7EC8E3)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                R.A.M ENGINEERING
-              </div>
-              <div style={{ color: "#374151", fontSize: "0.49rem", letterSpacing: "3px" }}>ORDER FORM</div>
+              <div style={{ fontWeight: 700, fontSize: "1rem", color: "#111827" }}>RAM Engineering</div>
+              <div style={{ color: "#9ca3af", fontSize: "0.7rem" }}>Order Form</div>
             </div>
           </div>
 
-          {/* Notion database selector */}
-          <div style={{ display: "flex", alignItems: "center", gap: "7px", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "5px", background: "#001B44", border: "1px solid #4B9CD340", borderRadius: "7px", padding: "5px 10px" }}>
-              <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#4B9CD3", boxShadow: "0 0 5px #4B9CD3" }} />
-              <span style={{ color: "#7EC8E3", fontSize: "0.62rem" }}>Notion Connected</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "7px", padding: "5px 11px" }}>
+              <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#2563eb" }} />
+              <span style={{ color: "#1d4ed8", fontSize: "0.75rem", fontWeight: 500 }}>Notion connected</span>
             </div>
             <button onClick={() => setShowDbPicker(true)}
-              style={{ background: "linear-gradient(135deg,#001B44,#001B44)", color: "#7EC8E3", border: "1px solid #4B9CD340", borderRadius: "7px", padding: "5px 11px", fontSize: "0.62rem", cursor: "pointer", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
-              🗄 {targetDb ? targetDb.title.length > 20 ? targetDb.title.slice(0, 20) + "…" : targetDb.title : "SELECT DATABASE"}
+              style={{ background: "#fff", color: "#374151", border: "1px solid #d1d5db", borderRadius: "7px", padding: "5px 12px", fontSize: "0.75rem", cursor: "pointer", fontWeight: 500 }}>
+              🗄 {targetDb ? (targetDb.title.length > 22 ? targetDb.title.slice(0, 22) + "…" : targetDb.title) : "Select database"}
             </button>
             {targetDb && (
               <a href={`https://notion.so/${targetDb.id.replace(/-/g, "")}`} target="_blank" rel="noopener noreferrer"
-                style={{ background: "transparent", border: "1px solid #4B9CD330", color: "#4B9CD3", borderRadius: "7px", padding: "5px 10px", fontSize: "0.6rem", textDecoration: "none", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
-                ↗ VIEW DB
+                style={{ background: "#fff", border: "1px solid #d1d5db", color: "#374151", borderRadius: "7px", padding: "5px 11px", fontSize: "0.75rem", textDecoration: "none", fontWeight: 500 }}>
+                Open in Notion ↗
               </a>
             )}
           </div>
         </div>
       </div>
 
-      <div style={{ maxWidth: "1440px", margin: "0 auto", padding: "18px 26px" }}>
+      <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "24px 28px" }}>
 
-        {/* ── NOTION STATUS PANEL ── */}
-        <div style={{ background: notionReady ? "#001B44" : "#080d1a", border: `1px solid ${notionReady ? "#4B9CD330" : "#0d1220"}`, borderRadius: "14px", padding: "14px 18px", marginBottom: "14px" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span style={{ fontSize: "1.2rem" }}>⬡</span>
-              <div>
-                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.65rem", color: notionReady ? "#7EC8E3" : "#6b7280", letterSpacing: "1px" }}>
-                  {notionReady ? "NOTION READY" : "NOTION SYNC"}
-                </div>
-                <div style={{ color: "#374151", fontSize: "0.58rem", marginTop: "1px" }}>
-                  {!targetDb && (
-                    <span>Connected · <button onClick={() => setShowDbPicker(true)} style={{ background: "none", border: "none", color: "#4B9CD3", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", padding: 0, textDecoration: "underline" }}>Select a database ↗</button></span>
-                  )}
-                  {notionReady && (
-                    <>Pushing to <strong style={{ color: "#7EC8E3" }}>"{targetDb.title}"</strong></>
-                  )}
-                </div>
-              </div>
+        {/* Notion status bar */}
+        <div style={{ background: notionReady ? "#eff6ff" : "#f9fafb", border: `1px solid ${notionReady ? "#bfdbfe" : "#e5e7eb"}`, borderRadius: "12px", padding: "14px 18px", marginBottom: "16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: "0.85rem", color: notionReady ? "#1d4ed8" : "#6b7280" }}>
+              {notionReady ? `Syncing to "${targetDb.title}"` : "No database selected"}
             </div>
-            <div style={{ display: "flex", gap: "7px", alignItems: "center" }}>
-              {targetDb && (
-                <button onClick={() => setShowDbPicker(true)}
-                  style={{ background: "transparent", border: "1px solid #4B9CD340", color: "#4B9CD3", borderRadius: "7px", padding: "6px 12px", fontSize: "0.6rem", cursor: "pointer", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>
-                  CHANGE DB
-                </button>
-              )}
-              {notionReady && mergedData && (
-                <button onClick={autoPushToNotion} disabled={pushing}
-                  style={{ background: pushing ? "#1f2937" : "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: pushing ? "#4b5563" : "#fff", border: "none", borderRadius: "7px", padding: "6px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.63rem", cursor: pushing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
-                  {pushing ? <><span className="spin">↻</span> PUSHING…</> : "↑ PUSH TO NOTION"}
-                </button>
-              )}
+            <div style={{ color: "#9ca3af", fontSize: "0.72rem", marginTop: "2px" }}>
+              {!targetDb ? <button onClick={() => setShowDbPicker(true)} style={{ background: "none", border: "none", color: "#2563eb", cursor: "pointer", fontSize: "inherit", padding: 0 }}>Choose a database →</button> : "Rows will be pushed as new pages."}
             </div>
+          </div>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <button onClick={() => setShowDbPicker(true)}
+              style={{ background: "#fff", border: "1px solid #d1d5db", color: "#374151", borderRadius: "7px", padding: "6px 12px", fontSize: "0.75rem", cursor: "pointer", fontWeight: 500 }}>
+              Change database
+            </button>
+            {notionReady && mergedData && (
+              <button onClick={autoPushToNotion} disabled={pushing}
+                style={{ background: pushing ? "#e5e7eb" : "#2563eb", color: pushing ? "#9ca3af" : "#fff", border: "none", borderRadius: "7px", padding: "6px 14px", fontWeight: 600, fontSize: "0.78rem", cursor: pushing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
+                {pushing ? <><span className="spin">↻</span> Sending…</> : "↑ Push to Notion"}
+              </button>
+            )}
           </div>
         </div>
 
-        {/* ── UPLOAD ── */}
-        <div style={{ background: "#080d1a", border: "1px solid #0d1220", borderRadius: "16px", padding: "16px", marginBottom: "14px" }}>
-          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.55rem", letterSpacing: "4px", color: "#374151", marginBottom: "10px" }}>UPLOAD YOUR FILE OR GOOGLE SHEET</div>
+        {/* Upload section */}
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: "14px", padding: "20px", marginBottom: "16px" }}>
+          <div style={{ fontWeight: 600, fontSize: "0.9rem", color: "#111827", marginBottom: "4px" }}>Upload your data</div>
+          <div style={{ color: "#9ca3af", fontSize: "0.78rem", marginBottom: "16px" }}>Drop a spreadsheet file or paste a Google Sheet link below.</div>
 
-          {/* Single drop zone */}
-          <div style={{ marginBottom: "12px" }}>
-            <DropZone label="Drop your file here" sublabel=".xlsx / .xls / .csv" icon="📗" accept=".csv,.xlsx,.xls" onFile={(f) => { setFile1(f); setUploadTimestamp(new Date()); }} file={file1} />
+          {/* File drop zone */}
+          <div style={{ marginBottom: "16px" }}>
+            <label style={labelStyle}>File (.xlsx, .xls, .csv)</label>
+            <DropZone label="Click or drag a file here" sublabel=".xlsx / .xls / .csv" accept=".csv,.xlsx,.xls" onFile={(f) => { setFile1(f); setUploadTimestamp(new Date()); }} file={file1} />
           </div>
 
-          {/* Google Sheets section */}
-          <div style={{ marginBottom: "12px" }}>
-            <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.55rem", letterSpacing: "4px", color: "#374151", marginBottom: "8px" }}>UPLOAD YOUR GOOGLE SHEET LINK</div>
-
-            {/* Tip box */}
-            <div style={{ background: "#00101a", border: "1px solid #4B9CD340", borderRadius: "9px", padding: "9px 13px", marginBottom: "9px", display: "flex", alignItems: "flex-start", gap: "8px" }}>
-              <span style={{ fontSize: "0.85rem", flexShrink: 0 }}>💡</span>
-              <div style={{ fontSize: "0.61rem", color: "#7EC8E3", lineHeight: 1.8 }}>
-                Before pasting your link, open your Google Sheet and go to{" "}
-                <strong style={{ color: "#fff" }}>File → Share → Share with others</strong>, then set access to{" "}
-                <strong style={{ color: "#4ade80" }}>"Anyone with the link" → Viewer</strong>. Otherwise the import will be blocked.
-              </div>
+          {/* Google Sheets */}
+          <div style={{ marginBottom: "16px" }}>
+            <label style={labelStyle}>Google Sheet link</label>
+            <div style={{ background: "#fefce8", border: "1px solid #fde68a", borderRadius: "8px", padding: "10px 13px", marginBottom: "8px", fontSize: "0.78rem", color: "#92400e", lineHeight: 1.7 }}>
+              Before pasting your link, go to <strong>File → Share → Share with others</strong> in Google Sheets and set access to <strong>"Anyone with the link" → Viewer</strong>. Otherwise the import will be blocked.
             </div>
-
-            {/* URL input */}
             <input
               value={sheetUrl}
               onChange={(e) => setSheetUrl(e.target.value)}
               placeholder="https://docs.google.com/spreadsheets/d/..."
-              style={{ width: "100%", background: "#04060f", border: `1px solid ${sheetUrl ? "#4B9CD3" : "#374151"}`, borderRadius: "8px", padding: "9px 12px", color: "#f9fafb", fontSize: "0.72rem", fontFamily: "monospace", outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" }}
+              style={{ ...inputStyle, borderColor: sheetUrl ? "#2563eb" : "#d1d5db" }}
             />
             {sheetUrl && !/spreadsheets\/d\//.test(sheetUrl) && (
-              <div style={{ color: "#f87171", fontSize: "0.57rem", marginTop: "4px" }}>⚠ That doesn't look like a valid Google Sheets URL</div>
+              <div style={{ color: "#dc2626", fontSize: "0.72rem", marginTop: "4px" }}>⚠ That doesn't look like a valid Google Sheets URL.</div>
             )}
           </div>
 
-          {/* Orderer + Project Team */}
-          <div style={{ display: "flex", gap: "10px", marginBottom: "12px", flexWrap: "wrap" }}>
-            <div style={{ flex: 1, minWidth: "180px" }}>
-              <div style={{ color: "#6b7280", fontSize: "0.55rem", letterSpacing: "2px", fontFamily: "'Syne',sans-serif", fontWeight: 700, marginBottom: "5px" }}>ORDERER</div>
-              <input
-                value={orderer}
-                onChange={(e) => setOrderer(e.target.value)}
-                placeholder="Your name"
-                style={{ width: "100%", background: "#04060f", border: "1px solid #374151", borderRadius: "8px", padding: "8px 12px", color: "#f9fafb", fontSize: "0.72rem", fontFamily: "monospace", outline: "none", boxSizing: "border-box" }}
-              />
+          {/* Orderer + Project team */}
+          <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: "160px" }}>
+              <label style={labelStyle}>Your name</label>
+              <input value={orderer} onChange={(e) => setOrderer(e.target.value)} placeholder="e.g. Jane Smith" style={inputStyle} />
             </div>
-            <div style={{ flex: 1, minWidth: "180px" }}>
-              <div style={{ color: "#6b7280", fontSize: "0.55rem", letterSpacing: "2px", fontFamily: "'Syne',sans-serif", fontWeight: 700, marginBottom: "5px" }}>PROJECT TEAM</div>
-              <input
-                value={projectTeam}
-                onChange={(e) => setProjectTeam(e.target.value)}
-                placeholder="Team or project name"
-                style={{ width: "100%", background: "#04060f", border: "1px solid #374151", borderRadius: "8px", padding: "8px 12px", color: "#f9fafb", fontSize: "0.72rem", fontFamily: "monospace", outline: "none", boxSizing: "border-box" }}
-              />
+            <div style={{ flex: 1, minWidth: "160px" }}>
+              <label style={labelStyle}>Project or team</label>
+              <input value={projectTeam} onChange={(e) => setProjectTeam(e.target.value)} placeholder="e.g. Mechanical — Q2" style={inputStyle} />
             </div>
           </div>
 
-          {/* Timestamp display */}
           {uploadTimestamp && file1 && (
-            <div style={{ color: "#4B9CD3", fontSize: "0.6rem", marginBottom: "10px", fontFamily: "monospace" }}>
-              🕐 File selected: {uploadTimestamp.toLocaleString()}
+            <div style={{ color: "#2563eb", fontSize: "0.75rem", marginBottom: "12px" }}>
+              File selected at {uploadTimestamp.toLocaleString()}
             </div>
           )}
 
-          {error && <div style={{ color: "#f87171", fontSize: "0.67rem", padding: "6px 11px", background: "#160404", borderRadius: "7px", marginBottom: "8px" }}>⚠ {error}</div>}
-          <div style={{ display: "flex", alignItems: "center", gap: "9px", flexWrap: "wrap" }}>
+          {error && (
+            <div style={{ color: "#dc2626", fontSize: "0.78rem", padding: "8px 12px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", marginBottom: "10px" }}>
+              ⚠ {error}
+            </div>
+          )}
+
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
             <button onClick={merge} disabled={loading}
-              style={{ background: loading ? "#111827" : "linear-gradient(135deg,#4B9CD3,#7EC8E3)", color: loading ? "#4b5563" : "#fff", border: "none", borderRadius: "9px", padding: "8px 20px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.7rem", letterSpacing: "1.5px", cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
-              {loading ? <><span className="spin">↻</span> PARSING…</> : "⬡ PROCESS"}
+              style={{ background: loading ? "#e5e7eb" : "#2563eb", color: loading ? "#9ca3af" : "#fff", border: "none", borderRadius: "9px", padding: "9px 22px", fontWeight: 600, fontSize: "0.85rem", cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+              {loading ? <><span className="spin">↻</span> Processing…</> : "Process file"}
             </button>
-            {notionReady && mergedData && <span style={{ color: "#34d399", fontSize: "0.58rem" }}>✓ Ready — click Push to send to Notion</span>}
+            {notionReady && mergedData && <span style={{ color: "#16a34a", fontSize: "0.75rem" }}>✓ Ready to push to Notion</span>}
           </div>
         </div>
 
-        {/* ── RESULTS ── */}
+        {/* Results */}
         {mergedData && (
           <>
             {/* Parse info */}
             {parseInfo.length > 0 && (
-              <div style={{ background: "#08100d", border: "1px solid #34d39918", borderRadius: "8px", padding: "7px 13px", marginBottom: "10px", display: "flex", gap: "14px", flexWrap: "wrap" }}>
-                <span style={{ color: "#374151", fontSize: "0.53rem", letterSpacing: "2px", fontFamily: "'Syne',sans-serif", fontWeight: 700, alignSelf: "center" }}>PARSED</span>
-                {parseInfo.map((info, i) => <span key={i} style={{ color: "#34d399", fontSize: "0.61rem", fontFamily: "monospace" }}>{info}</span>)}
+              <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "8px 14px", marginBottom: "12px", display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                {parseInfo.map((info, i) => <span key={i} style={{ color: "#15803d", fontSize: "0.78rem" }}>{info}</span>)}
               </div>
             )}
 
             {/* Stats */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(132px,1fr))", gap: "8px", marginBottom: "11px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: "10px", marginBottom: "14px" }}>
               {[
-                { l: "TOTAL ROWS",  v: mergedData.length, c: "#4B9CD3" },
-                { l: "COLUMNS",     v: headers.length,    c: "#7EC8E3" },
-                totalQty !== null && { l: "TOTAL QTY",   v: totalQty.toLocaleString(), c: "#a5b4fc" },
-                totalRevenue !== null && { l: "TOTAL VALUE", v: `$${totalRevenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, c: "#6ee7b7" },
+                { l: "Total rows",  v: mergedData.length, c: "#1d4ed8", bg: "#eff6ff" },
+                { l: "Columns",     v: headers.length,    c: "#374151", bg: "#f9fafb" },
+                totalQty !== null && { l: "Total qty",   v: totalQty.toLocaleString(), c: "#5b21b6", bg: "#f5f3ff" },
+                totalRevenue !== null && { l: "Total value", v: `$${totalRevenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, c: "#065f46", bg: "#f0fdf4" },
               ].filter(Boolean).map((s) => (
-                <div key={s.l} style={{ background: "#080d1a", border: "1px solid #0d1220", borderRadius: "10px", padding: "11px" }}>
-                  <div style={{ color: s.c, fontSize: "1.05rem", fontWeight: 700, fontFamily: "'Syne',sans-serif" }}>{s.v}</div>
-                  <div style={{ color: "#1f2937", fontSize: "0.5rem", letterSpacing: "2px", marginTop: "2px" }}>{s.l}</div>
+                <div key={s.l} style={{ background: s.bg, border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px 14px" }}>
+                  <div style={{ color: s.c, fontSize: "1.1rem", fontWeight: 700 }}>{s.v}</div>
+                  <div style={{ color: "#9ca3af", fontSize: "0.68rem", marginTop: "2px" }}>{s.l}</div>
                 </div>
               ))}
             </div>
 
             {/* Column mapping display */}
-            <div style={{ background: "#080d1a", border: "1px solid #0d1220", borderRadius: "11px", padding: "10px 14px", marginBottom: "10px" }}>
-              <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.53rem", letterSpacing: "4px", color: "#374151", marginBottom: "7px" }}>
-                COLUMN TYPES {columnMapping && <span style={{ color: "#4B9CD3", marginLeft: "10px" }}>→ NOTION MAPPING ACTIVE</span>}
+            <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px 16px", marginBottom: "12px" }}>
+              <div style={{ fontWeight: 600, fontSize: "0.78rem", color: "#374151", marginBottom: "8px" }}>
+                Column types {columnMapping && <span style={{ color: "#2563eb", fontWeight: 400, marginLeft: "8px" }}>— Notion mapping applied</span>}
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                 {headers.map((h) => {
-                  const meta = COL_TYPE_META[colTypes[h]] || COL_TYPE_META.unknown;
                   const notionProp = columnMapping?.[h];
                   const notionPropType = notionProp && notionSchema?.[notionProp]?.type;
                   const nMeta = notionPropType ? NOTION_PROP_META[notionPropType] : null;
                   return (
-                    <div key={h} style={{ display: "flex", alignItems: "center", gap: "4px", background: meta.badge, border: `1px solid ${meta.color}28`, borderRadius: "6px", padding: "3px 7px" }}>
-                      <span style={{ color: meta.color, fontSize: "0.55rem", fontWeight: 700 }}>{meta.icon}</span>
-                      <span style={{ color: "#d1d5db", fontSize: "0.63rem" }}>{h}</span>
+                    <div key={h} style={{ display: "flex", alignItems: "center", gap: "4px", background: "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: "6px", padding: "3px 9px" }}>
+                      <span style={{ color: "#374151", fontSize: "0.75rem" }}>{h}</span>
                       {nMeta && (
                         <>
-                          <span style={{ color: "#374151", fontSize: "0.5rem" }}>→</span>
-                          <span style={{ color: nMeta.color, fontSize: "0.55rem" }}>{nMeta.icon} {notionProp}</span>
+                          <span style={{ color: "#d1d5db", fontSize: "0.65rem" }}>→</span>
+                          <span style={{ color: nMeta.color, fontSize: "0.65rem" }}>{nMeta.icon} {notionProp}</span>
                         </>
                       )}
                     </div>
@@ -1062,77 +827,66 @@ export default function App() {
               </div>
             </div>
 
-            {/* Tabs */}
-            <div style={{ borderBottom: "1px solid #0d1220", marginBottom: "11px" }}>
-              <button className={`tab on`}>MERGED TABLE</button>
+            {/* Table */}
+            <div style={{ overflowX: "auto", borderRadius: "10px", border: "1px solid #e5e7eb", marginBottom: "12px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem", background: "#fff" }}>
+                <thead>
+                  <tr style={{ background: "#f9fafb" }}>
+                    {displayHeaders.map((h) => (
+                      <th key={h} className="th-sort" onClick={() => handleSort(h)}
+                        style={{ padding: "10px 12px", textAlign: "left", borderBottom: "1px solid #e5e7eb", whiteSpace: "nowrap", background: sortCol === h ? "#f1f5f9" : undefined, userSelect: "none" }}>
+                        <span style={{ color: "#374151", fontSize: "0.8rem", fontWeight: 600 }}>
+                          {h}{sortCol === h ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                        </span>
+                      </th>
+                    ))}
+                    <th style={{ padding: "10px 12px", borderBottom: "1px solid #e5e7eb", color: "#9ca3af", fontSize: "0.7rem", fontWeight: 500 }}>Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayRows.slice(0, 500).map((row, i) => (
+                    <tr key={i} className="data-row">
+                      {displayHeaders.map((h) => (
+                        <td key={h} style={{ padding: "8px 12px", borderBottom: "1px solid #f3f4f6", maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <Cell value={row[h]} type={colTypes[h]} />
+                        </td>
+                      ))}
+                      <td style={{ padding: "8px 12px", borderBottom: "1px solid #f3f4f6", color: "#9ca3af", fontSize: "0.72rem", whiteSpace: "nowrap" }}>{row._source}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
-            {/* Table */}
-            <>
-                <div style={{ overflowX: "auto", borderRadius: "11px", border: "1px solid #0d1220" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.71rem" }}>
-                    <thead>
-                      <tr style={{ background: "#06090f" }}>
-                        {displayHeaders.map((h) => {
-                          const meta = COL_TYPE_META[colTypes[h]] || COL_TYPE_META.unknown;
-                          return (
-                            <th key={h} className="th-sort" onClick={() => handleSort(h)}
-                              style={{ padding: "9px 11px", textAlign: "left", borderBottom: "1px solid #0d1220", whiteSpace: "nowrap", background: sortCol === h ? "#0d1220" : undefined, userSelect: "none" }}>
-                              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                                <span style={{ color: meta.color, fontSize: "0.48rem", letterSpacing: "1px", fontFamily: "'Syne',sans-serif", fontWeight: 700 }}>{meta.icon} {meta.label}</span>
-                                <span style={{ color: "#d1d5db", fontSize: "0.63rem", fontWeight: 500 }}>{h}{sortCol === h ? (sortDir === "asc" ? " ↑" : " ↓") : ""}</span>
-                              </div>
-                            </th>
-                          );
-                        })}
-                        <th style={{ padding: "9px 11px", borderBottom: "1px solid #0d1220", color: "#1f2937", fontFamily: "'Syne',sans-serif", fontSize: "0.5rem", letterSpacing: "2px" }}>SOURCE</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {displayRows.slice(0, 500).map((row, i) => (
-                        <tr key={i} className="data-row row-anim">
-                          {displayHeaders.map((h) => (
-                            <td key={h} style={{ padding: "7px 11px", borderBottom: "1px solid #06090f", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              <Cell value={row[h]} type={colTypes[h]} />
-                            </td>
-                          ))}
-                          <td style={{ padding: "7px 11px", borderBottom: "1px solid #06090f", color: "#374151", fontSize: "0.57rem", whiteSpace: "nowrap" }}>{row._source}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {displayRows.length > 500 && <div style={{ textAlign: "center", color: "#374151", fontSize: "0.61rem", marginTop: "6px" }}>Showing 500 of {displayRows.length} rows</div>}
+            {displayRows.length > 500 && <div style={{ textAlign: "center", color: "#9ca3af", fontSize: "0.75rem", marginBottom: "8px" }}>Showing 500 of {displayRows.length} rows</div>}
 
-                <div style={{ marginTop: "11px", display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                  <span style={{ color: "#1f2937", fontSize: "0.56rem" }}>{mergedData.length} rows</span>
-                  {notionReady && (
-                    <button onClick={autoPushToNotion} disabled={pushing}
-                      style={{ background: pushing ? "#1f2937" : "linear-gradient(135deg,#4B9CD3,#4B9CD3)", color: pushing ? "#4b5563" : "#fff", border: "none", borderRadius: "8px", padding: "7px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.65rem", cursor: pushing ? "not-allowed" : "pointer" }}>
-                      ↑ PUSH TO NOTION
-                    </button>
-                  )}
-                  {!notionReady && (
-                    <button onClick={() => setShowDbPicker(true)}
-                      style={{ background: "transparent", border: "1px solid #4B9CD340", color: "#4B9CD3", borderRadius: "8px", padding: "7px 14px", fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: "0.65rem", cursor: "pointer" }}>
-                      ⬡ SELECT DATABASE TO PUSH
-                    </button>
-                  )}
-                </div>
-            </>
+            <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <span style={{ color: "#9ca3af", fontSize: "0.75rem" }}>{mergedData.length} total rows</span>
+              {notionReady ? (
+                <button onClick={autoPushToNotion} disabled={pushing}
+                  style={{ background: pushing ? "#e5e7eb" : "#2563eb", color: pushing ? "#9ca3af" : "#fff", border: "none", borderRadius: "8px", padding: "8px 16px", fontWeight: 600, fontSize: "0.8rem", cursor: pushing ? "not-allowed" : "pointer" }}>
+                  ↑ Push to Notion
+                </button>
+              ) : (
+                <button onClick={() => setShowDbPicker(true)}
+                  style={{ background: "#fff", border: "1px solid #2563eb", color: "#2563eb", borderRadius: "8px", padding: "8px 16px", fontWeight: 600, fontSize: "0.8rem", cursor: "pointer" }}>
+                  Select database to push
+                </button>
+              )}
+            </div>
           </>
         )}
 
         {/* Empty state */}
         {!mergedData && (
-          <div style={{ textAlign: "center", padding: "48px 20px", color: "#1f2937" }}>
-            <div style={{ fontSize: "1.9rem", marginBottom: "10px", opacity: 0.35 }}>⬡</div>
-            <div style={{ fontFamily: "'Syne',sans-serif", fontSize: "0.58rem", letterSpacing: "4px", marginBottom: "14px" }}>THE LOOP</div>
-            <div style={{ color: "#1f2937", fontSize: "0.64rem", lineHeight: 2.3, maxWidth: "460px", margin: "0 auto", textAlign: "left" }}>
-              <div>① <span style={{ color: "#4B9CD3" }}>Drop a file (.xlsx / .xls / .csv)</span> or paste a Google Sheet link</div>
-              <div>② <span style={{ color: "#7EC8E3" }}>Enter orderer + project team</span> → saved with every row</div>
-              <div>③ <span style={{ color: "#34d399" }}>Process</span> → timestamp auto-captured</div>
-              <div>④ <span style={{ color: "#f472b6" }}>Push</span> → rows become pages in Notion</div>
+          <div style={{ textAlign: "center", padding: "60px 20px", color: "#9ca3af" }}>
+            <div style={{ fontSize: "2rem", marginBottom: "12px" }}>📋</div>
+            <div style={{ fontWeight: 600, fontSize: "0.9rem", color: "#374151", marginBottom: "8px" }}>How it works</div>
+            <div style={{ fontSize: "0.82rem", lineHeight: 2.2, maxWidth: "400px", margin: "0 auto", textAlign: "left" }}>
+              <div>1. <span style={{ color: "#111827" }}>Upload a file or paste a Google Sheet link</span></div>
+              <div>2. <span style={{ color: "#111827" }}>Enter your name and project team</span></div>
+              <div>3. <span style={{ color: "#111827" }}>Click "Process file" — your data will appear here</span></div>
+              <div>4. <span style={{ color: "#111827" }}>Click "Push to Notion" to send all rows</span></div>
             </div>
           </div>
         )}
